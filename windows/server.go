@@ -100,7 +100,7 @@ func (a *API) handler() http.Handler {
 			list = append(list, map[string]string{"url": u, "name": a.prefs.SubLabel(u)})
 		}
 		writeJSON(w, map[string]any{"subs": list, "updated": d.SubUpdated, "ruDirect": d.RuDirect, "blockedVpn": d.BlockedVPN, "autoStart": d.AutoStart,
-			"summary": a.core.View().Summary})
+			"autorun": AutostartEnabled(), "summary": a.core.View().Summary})
 	})
 	api("/api/subs/add", func(w http.ResponseWriter, r *http.Request) {
 		u := strings.TrimSpace(str(body(r)["url"]))
@@ -137,6 +137,20 @@ func (a *API) handler() http.Handler {
 			a.core.Restart()
 		}
 		writeJSON(w, true)
+	})
+	api("/api/autorun", func(w http.ResponseWriter, r *http.Request) {
+		on, _ := body(r)["on"].(bool)
+		if err := SetAutostart(on); err != nil {
+			a.log.Add("Автозапуск: " + err.Error())
+			writeJSON(w, map[string]any{"ok": false, "error": err.Error(), "on": AutostartEnabled()})
+			return
+		}
+		if on {
+			a.log.Add("Автозапуск включён: " + installedExe())
+		} else {
+			a.log.Add("Автозапуск выключен")
+		}
+		writeJSON(w, map[string]any{"ok": true, "on": AutostartEnabled()})
 	})
 	api("/api/refresh", func(w http.ResponseWriter, r *http.Request) {
 		a.prefs.Update(func(d *PrefsData) { d.SubUpdated = 0 })

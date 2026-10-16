@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,3 +54,12 @@ func runningApps() []string                 { return nil }
 func swapExe(newExe string) (string, error) { return newExe, nil }
 func cleanupOldExe()                        {}
 func waitPid(pid int)                       {}
+
+const trayArg = "--tray"
+
+func AutostartEnabled() bool { return false }
+func SetAutostart(on bool) error {
+	return errors.New("автозапуск есть только в Windows")
+}
+func syncInstalled()       {}
+func installedExe() string { return "" }

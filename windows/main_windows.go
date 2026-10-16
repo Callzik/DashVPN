@@ -22,11 +22,12 @@ var singBoxBin []byte
 var xrayBin []byte
 
 var (
-	user32           = windows.NewLazySystemDLL("user32.dll")
-	procMessageBox   = user32.NewProc("MessageBoxW")
-	procFindWindow   = user32.NewProc("FindWindowW")
-	procShowWindow   = user32.NewProc("ShowWindow")
-	procSetForegroun = user32.NewProc("SetForegroundWindow")
+	user32              = windows.NewLazySystemDLL("user32.dll")
+	procMessageBox      = user32.NewProc("MessageBoxW")
+	procFindWindow      = user32.NewProc("FindWindowW")
+	procShowWindow      = user32.NewProc("ShowWindow")
+	procSetForegroun    = user32.NewProc("SetForegroundWindow")
+	procIsWindowVisible = user32.NewProc("IsWindowVisible")
 )
 
 func msgBox(text string) {
@@ -35,11 +36,14 @@ func msgBox(text string) {
 	procMessageBox.Call(0, uintptr(unsafe.Pointer(t)), uintptr(unsafe.Pointer(c)), 0x40)
 }
 
-// one copy only: a second launch brings the running window forward
-func singleInstance() bool {
+// one copy only: a second launch brings the running window forward (not when started for the tray)
+func singleInstance(raise bool) bool {
 	name, _ := windows.UTF16PtrFromString("Local\\Dash-by-Claude")
 	_, err := windows.CreateMutex(nil, false, name)
 	if err == windows.ERROR_ALREADY_EXISTS {
+		if !raise {
+			return false
+		}
 		cls, _ := windows.UTF16PtrFromString("webview")
 		title, _ := windows.UTF16PtrFromString("Dash")
 		if h, _, _ := procFindWindow.Call(uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(title))); h != 0 {
@@ -101,7 +105,7 @@ func attachToJob(cmd *exec.Cmd) {
 
 func main() {
 	hardenProcess()
-	connect := false
+	connect, hidden := false, false
 	for i, a := range os.Args {
 		if a == "--after-update" && i+1 < len(os.Args) {
 			if pid, err := strconv.Atoi(os.Args[i+1]); err == nil {
@@ -111,8 +115,11 @@ func main() {
 		if a == "--connect" {
 			connect = true
 		}
+		if a == trayArg {
+			hidden = true
+		}
 	}
-	if !singleInstance() {
+	if !singleInstance(!hidden) {
 		return
 	}
 	if !windows.GetCurrentProcessToken().IsElevated() {
@@ -124,6 +131,7 @@ func main() {
 		return
 	}
 	cleanupOldExe()
+	syncInstalled()
 	initJob()
 	binDir := filepath.Join(dataRoot(), "bin", Version)
 	if err := os.MkdirAll(binDir, 0700); err == nil {
@@ -183,6 +191,9 @@ func main() {
 		if wasOn {
 			args = append(args, "--connect")
 		}
+		if r, _, _ := procIsWindowVisible.Call(uintptr(w.Window())); r == 0 {
+			args = append(args, trayArg) // updated while hidden: come back hidden
+		}
 		run, err := finalPath(lock)
 		if err == nil {
 			err = exec.Command(run, args...).Start()
@@ -197,6 +208,9 @@ func main() {
 	}
 	w.SetSize(440, 820, webview2.HintMin)
 	tr := newTray(uintptr(w.Window()), app, app.API.quit)
+	if hidden {
+		procShowWindow.Call(uintptr(w.Window()), swHide) // started with Windows: stay in the tray
+	}
 	w.Navigate(app.URL())
 	w.Run()
 	tr.Remove()

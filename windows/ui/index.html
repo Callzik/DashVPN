@@ -66,7 +66,7 @@ h1{font-size:21px;font-weight:700;flex:1}
 .badge{border-radius:14px;padding:4px 10px;font-size:13px;font-weight:600;background:var(--surface2);color:var(--muted)}
 .badge.ok{background:var(--accent-tint);color:var(--accent)}
 .badge.warn{background:var(--warn-tint);color:var(--warn)}
-.link{color:var(--accent);font-size:14px}
+.link{color:var(--accent);font-size:13px;font-weight:600;letter-spacing:0;text-transform:none}
 .pbtn{background:var(--surface2);border:1px solid var(--line2);border-radius:14px;padding:7px 16px;font-weight:600;min-width:96px}
 .pbtn:hover{border-color:#4a465a}
 .clickable{cursor:pointer}.clickable:hover{border-color:var(--line2)}
@@ -86,6 +86,7 @@ h1{font-size:21px;font-weight:700;flex:1}
 .switch{position:relative;width:42px;height:24px;border-radius:12px;background:var(--line2);transition:background .2s;flex:none}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:9px;background:#fff;transition:transform .2s}
 .switch.on{background:var(--accent)}.switch.on::after{transform:translateX(18px)}
+.sep{height:1px;background:var(--line);margin:12px 0}
 .x{color:var(--muted);font-size:18px;padding:4px 6px 4px 14px}
 .x:hover{color:var(--bad)}
 pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text}
@@ -142,39 +143,51 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 <section class="view" id="v-settings">
   <div class="top"><button class="back" onclick="show('main')">←</button><h1>Настройки</h1><span class="m" id="ver2"></span></div>
   <div class="scroll">
-    <div class="section">Подписки</div>
+    <div class="section row"><span class="grow">Подписки</span><button class="link" onclick="refreshSubs()" title="Скачать подписки заново">Обновить</button></div>
     <div class="card">
       <div id="sublist"></div>
-      <input class="field" id="subinput" placeholder="Ещё одна ссылка: https://… или vless://…" style="margin-top:12px">
+      <input class="field" id="subinput" placeholder="Ещё одна ссылка: https://… или vless://…" style="margin-top:12px" onkeydown="if(event.key==='Enter')addSub('subinput')">
       <div class="row" style="margin-top:10px">
         <button class="secondary grow" onclick="pasteInto('subinput')">Вставить</button>
         <button class="secondary grow" style="color:var(--accent)" onclick="addSub('subinput')">Добавить</button>
       </div>
       <div class="m" id="subinfo" style="margin-top:12px"></div>
-      <button class="secondary" style="width:100%;margin-top:12px" onclick="api('/api/refresh').then(()=>toast('Подписки обновляются'))">Обновить и переподключить</button>
     </div>
+
+    <div class="section">Запуск</div>
+    <div class="card">
+      <div class="row"><div class="grow"><div class="b">Запускать вместе с Windows</div><div class="m">Dash стартует в трее при входе в систему</div></div><div class="switch" id="sw-ar" onclick="setAutorun(this)"></div></div>
+      <div class="sep"></div>
+      <div class="row"><div class="grow"><div class="b">Подключаться при запуске</div><div class="m">VPN включается сам, без нажатия кнопки</div></div><div class="switch" id="sw-as" onclick="setAuto(this)"></div></div>
+    </div>
+
     <div class="section">Маршрутизация</div>
     <div class="card">
       <div class="row"><div class="grow"><div class="b">Российские сайты напрямую</div><div class="m">Без VPN: банки, Госуслуги, маркетплейсы</div></div><div class="switch" id="sw-ru" onclick="setOpt('ruDirect',this)"></div></div>
-      <div class="row" style="margin-top:14px"><div class="grow"><div class="b">Заблокированное в РФ — через VPN</div><div class="m">Даже если сайт в зоне .ru</div></div><div class="switch" id="sw-bl" onclick="setOpt('blockedVpn',this)"></div></div>
+      <div class="sep"></div>
+      <div class="row"><div class="grow"><div class="b">Заблокированное в РФ — через VPN</div><div class="m">Даже если сайт в зоне .ru</div></div><div class="switch" id="sw-bl" onclick="setOpt('blockedVpn',this)"></div></div>
+      <div class="sep"></div>
+      <div class="row clickable" onclick="show('apps')"><div class="grow"><div class="b">Приложения без VPN</div><div class="m ell" id="appsum">Весь трафик идёт через VPN</div></div><span class="m" style="font-size:20px">›</span></div>
     </div>
-    <div class="section">Приложения без VPN</div>
-    <div class="card clickable" onclick="show('apps')">
-      <div class="row"><div class="grow"><div class="b">Выбранные приложения</div><div class="m ell" id="appsum">Весь трафик идёт через VPN</div></div><span class="m" style="font-size:20px">›</span></div>
-    </div>
-    <div class="section">Запуск</div>
+
+    <div class="section">Обновления</div>
     <div class="card">
-      <div class="row"><div class="grow"><div class="b">Подключаться при запуске</div><div class="m">Сразу включать VPN, когда открывается Dash</div></div><div class="switch" id="sw-as" onclick="setAuto(this)"></div></div>
+      <div class="row"><div class="grow"><div class="b" id="ver3">Dash</div><div class="m" id="updstate">Обновления проверяются сами</div></div>
+        <button class="secondary" id="updbtn2" onclick="updAction()">Проверить</button></div>
     </div>
+
     <div class="section">Журнал</div>
     <div class="card">
-      <div class="row"><span class="m grow">Последние события</span><button class="secondary" onclick="copyLog()">Скопировать</button></div>
-      <pre class="log" id="log" style="margin-top:10px;max-height:300px;overflow:auto"></pre>
+      <div class="b">События подключения</div><div class="m">Пригодится, если что-то не работает</div>
+      <div class="row" style="margin-top:12px">
+        <button class="secondary grow" id="logbtn" onclick="toggleLog()">Показать</button>
+        <button class="secondary grow" onclick="copyLog()">Скопировать</button></div>
+      <pre class="log" id="log" style="display:none;margin-top:12px;max-height:300px;overflow:auto"></pre>
     </div>
+
     <div class="section">О приложении</div>
     <div class="card"><div class="m">Dash для Windows · ядра sing-box и Xray-core · создано с помощью Claude.<br>Весь трафик ПК идёт через VPN-адаптер, российские сайты — напрямую. Упавшее ядро перезапускается само, после сна соединение проверяется заново.</div>
-      <button class="secondary" style="width:100%;margin-top:12px" onclick="checkUpd()">Проверить обновления</button>
-      <button class="secondary" style="width:100%;margin-top:10px" onclick="api('/api/quit')">Отключить и выйти</button></div>
+      <button class="secondary" style="width:100%;margin-top:12px;color:var(--bad)" onclick="api('/api/quit')">Отключить VPN и выйти</button></div>
   </div>
 </section>
 
@@ -231,7 +244,9 @@ async function poll(){
   const ub=$('upd');ub.style.display=U.version?'':'none';
   if(U.version){$('updtext').textContent=U.progress===101?'Установка '+U.version+'…':U.progress>=0?'Загрузка '+U.version+' · '+U.progress+'%':U.error||('Доступна версия '+U.version);
     $('updbtn').style.display=U.progress>=0?'none':'';$('updbtn').textContent=U.error?'Ещё раз':'Обновить'}
-  $('ver').textContent='v'+S.version;$('ver2').textContent='версия '+S.version;
+  $('ver').textContent='v'+S.version;$('ver2').textContent='версия '+S.version;$('ver3').textContent='Dash '+S.version;
+  UPD=U;$('updstate').textContent=U.version?(U.progress===101?'Установка…':U.progress>=0?'Загрузка · '+U.progress+'%':U.error||'Доступна версия '+U.version):'Установлена последняя версия';
+  $('updbtn2').textContent=U.version&&U.progress<0?'Обновить':'Проверить';$('updbtn2').style.opacity=U.progress>=0?.5:1;
   if(!S.hasSubs && view!=='onb'){show('onb');return}
   if(S.hasSubs && view==='onb'){show('main')}
   const st=S.state;
@@ -290,7 +305,7 @@ document.addEventListener('contextmenu',e=>{if(!e.target.closest('.item'))e.prev
 
 async function loadSettings(){
   const r=await api('/api/subs');
-  $('sublist').innerHTML=(r.subs||[]).map((s,i)=>`${i?'<div style="height:1px;background:var(--line);margin:12px 0"></div>':''}
+  $('sublist').innerHTML=(r.subs||[]).map((s,i)=>`${i?'<div class="sep"></div>':''}
     <div class="row"><div class="grow"><div class="b ell">${esc(s.name)}</div><div class="m ell" style="font-family:Consolas,monospace;font-size:12px">${esc(s.url)}</div></div>
     <button class="x" title="Удалить" data-url="${esc(s.url)}">✕</button></div>`).join('');
   $('sublist').querySelectorAll('.x').forEach(b=>b.onclick=async()=>{
@@ -298,10 +313,11 @@ async function loadSettings(){
     if(!confirmBox('Удалить подписку?'))return;
     await api('/api/subs/remove',{url:b.dataset.url});loadSettings()});
   const upd=r.updated?new Date(r.updated*1000):null;
-  $('subinfo').textContent=(upd?'Загружены '+upd.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'Ещё не загружались')
-    +(r.summary?'\n'+r.summary:'')+'\nСерверы всех подписок объединяются. Пока VPN включён, подписки обновляются сами раз в 12 часов.';
+  $('subinfo').textContent=(upd?'Обновлены '+upd.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'Ещё не загружались')
+    +(r.summary?' · '+r.summary:'')+'\nПока VPN включён, обновляются сами раз в 12 часов.';
   $('subinfo').style.whiteSpace='pre-line';
-  $('sw-ru').classList.toggle('on',!!r.ruDirect);$('sw-bl').classList.toggle('on',!!r.blockedVpn);$('sw-as').classList.toggle('on',!!r.autoStart);
+  $('sw-ru').classList.toggle('on',!!r.ruDirect);$('sw-bl').classList.toggle('on',!!r.blockedVpn);
+  $('sw-as').classList.toggle('on',!!r.autoStart);$('sw-ar').classList.toggle('on',!!r.autorun);
   const ap=await api('/api/apps');const bl=ap.bypass||[];
   $('appsum').textContent=bl.length?bl.map(n=>n.replace(/\.exe$/i,'')).join(', '):'Весь трафик идёт через VPN';
   const lg=await api('/api/log');$('log').textContent=lg.text||'Пока пусто';
@@ -310,6 +326,11 @@ let confirmed=null;
 function confirmBox(q){return window.confirm(q)}
 async function setOpt(key,el){const v=!el.classList.contains('on');el.classList.toggle('on',v);await api('/api/settings',{[key]:v});if(S.state!=='off')toast('Переподключение для применения')}
 async function setAuto(el){const v=!el.classList.contains('on');el.classList.toggle('on',v);await api('/api/settings',{autoStart:v})}
+async function setAutorun(el){if(el.dataset.busy)return;el.dataset.busy=1;const v=!el.classList.contains('on');el.classList.toggle('on',v);
+  const r=await api('/api/autorun',{on:v});delete el.dataset.busy;el.classList.toggle('on',!!r.on);
+  toast(r.ok?(r.on?'Dash будет запускаться вместе с Windows':'Автозапуск выключен'):r.error)}
+async function refreshSubs(){await api('/api/refresh');toast(S.state!=='off'?'Подписки обновляются, переподключение':'Подписки обновятся при подключении')}
+function toggleLog(){const l=$('log'),on=l.style.display==='none';l.style.display=on?'':'none';$('logbtn').textContent=on?'Скрыть':'Показать';if(on)l.scrollTop=0}
 async function addSub(id,onb){
   const v=$(id).value.trim();
   const r=await api('/api/subs/add',{url:v});
@@ -394,6 +415,8 @@ function renderApps(){
 function toggleApp(n){const i=APPS.bypass.findIndex(x=>x.toLowerCase()===n.toLowerCase());if(i>=0)APPS.bypass.splice(i,1);else APPS.bypass.push(n);appsChanged=true;renderApps()}
 function addManual(){let n=$('appsearch').value.trim();if(!n)return;if(!/\.exe$/i.test(n))n+='.exe';if(!APPS.bypass.some(x=>x.toLowerCase()===n.toLowerCase()))APPS.bypass.push(n);appsChanged=true;$('appsearch').value='';renderApps()}
 async function leaveApps(){show('settings');if(appsChanged){await api('/api/apps/set',{list:APPS.bypass});if(S.state!=='off')toast('Переподключение для применения');loadSettings()}appsChanged=false}
+let UPD={};
+function updAction(){if(UPD.progress>=0)return;if(UPD.version)api('/api/update/install').then(poll);else checkUpd()}
 async function checkUpd(){toast('Проверка…');const r=await api('/api/update/check');toast(r.version?'Доступна версия '+r.version:'Установлена последняя версия');poll()}
 show('main');poll();setInterval(poll,1000);
 setInterval(()=>{if(view==='settings')api('/api/log').then(r=>$('log').textContent=r.text||'Пока пусто')},3000);
