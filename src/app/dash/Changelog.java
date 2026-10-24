@@ -46,6 +46,9 @@ public final class Changelog {
         ENTRIES.put(38, new String[]{
                 "В таблетке в строке состояния и в Now Bar видно, сколько VPN уже включён",
         });
+        ENTRIES.put(39, new String[]{
+                "Samsung: уведомление VPN попадает в Now Bar и таблетку в строке состояния без настроек для разработчиков",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
