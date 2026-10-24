@@ -43,6 +43,9 @@ public final class Changelog {
         ENTRIES.put(37, new String[]{
                 "Настройки → Остров и Now Bar: показывает, пускает ли телефон уведомление Dash в строку состояния, и открывает нужные настройки",
         });
+        ENTRIES.put(38, new String[]{
+                "В таблетке в строке состояния и в Now Bar видно, сколько VPN уже включён",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

@@ -32,6 +32,15 @@ final class LiveUpdate {
         }
     }
 
+    /** Short text in the status bar chip; without it the chip shows only the icon. */
+    static void chip(Notification.Builder b, String text) {
+        if (!supported()) return;
+        try {
+            Notification.Builder.class.getMethod("setShortCriticalText", String.class).invoke(b, text);
+        } catch (Throwable ignored) {
+        }
+    }
+
     /** null = unknown (old system or no such call). */
     static Boolean allowed(Context c) {
         if (!supported()) return null;
