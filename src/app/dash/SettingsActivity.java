@@ -22,7 +22,7 @@ import java.util.List;
 
 public class SettingsActivity extends Activity {
     private Prefs prefs;
-    private TextView modeWl, modeNet, modeHint, logView, appsCount;
+    private TextView modeWl, modeNet, modeHint, logView;
     private EditText subInput;
     private LinearLayout subList;
     private TextView updStatus, updBtn;
@@ -34,39 +34,318 @@ public class SettingsActivity extends Activity {
         }
     };
 
+    private static final int ROOT = -1, P_SUBS = 0, P_AUTO = 1, P_ROUTE = 2, P_APPS = 3, P_SHARE = 4,
+            P_HOME = 5, P_SERVERS = 6, P_UPDATE = 7, P_LOG = 8;
+    private static final String[] TITLES = {"Подписки", "Автовыбор серверов", "Маршрутизация",
+            "Приложения без VPN", "Раздача VPN", "Главный экран", "Серверы из подписки", "Обновление", "Журнал"};
+    private static final int[] ICONS = {IconView.SUBS, IconView.AUTO, IconView.ROUTE, IconView.APPS,
+            IconView.SHARE, IconView.HOME, IconView.SERVERS, IconView.UPDATE, IconView.LOG};
+    private static final int[] COLORS = {Ui.ACCENT, 0xFFF2B544, 0xFF5AA9FF, 0xFFFF9F6B,
+            0xFF4FD1C5, 0xFFF27BB0, 0xFFB48CFF, 0xFF6BD68A, 0xFFF0716B};
+    /** Extra words the search finds a page by: what is inside it, not only its title. */
+    private static final String[] KEYS = {
+            "ссылка подписка ключ vless добавить удалить вставить обновить переподключить",
+            "белые списки тип сети lte wi-fi вайфай мобильная группа режим выбор",
+            "российские сайты ру рф su напрямую заблокированные обход маршруты",
+            "исключения приложения напрямую мимо vpn split",
+            "точка доступа хотспот hotspot прокси socks http пароль логин раздать",
+            "плашки порядок оформление вид главный",
+            "список серверов обычные lte не участвуют заглушка",
+            "версия обновить установить загрузка apk",
+            "лог журнал ошибки диагностика скопировать поддержка"};
+    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_SHARE}, {P_HOME}, {P_SERVERS, P_UPDATE, P_LOG}};
+    private static final String[] GROUP_NAMES = {"Подключение", "Внешний вид", "О приложении"};
+
+    private ScrollView scroll;
+    private LinearLayout col, menuBody;
+    private int page = ROOT, rootScroll;
+    private String query = "";
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = new Prefs(this);
         getWindow().setStatusBarColor(Ui.BG);
         getWindow().setNavigationBarColor(Ui.BG);
-        Context c = this;
-        ScrollView sv = new ScrollView(c);
-        sv.setBackgroundColor(Ui.BG);
-        LinearLayout col = new LinearLayout(c);
+        scroll = new ScrollView(this);
+        scroll.setBackgroundColor(Ui.BG);
+        col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 16), Ui.dp(c, 20), Ui.dp(c, 32));
-        sv.addView(col);
-        setContentView(sv);
+        col.setPadding(Ui.dp(this, 16), Ui.dp(this, 12), Ui.dp(this, 16), Ui.dp(this, 32));
+        scroll.addView(col);
+        setContentView(scroll);
+        showRoot();
+    }
 
+    @Override public void onBackPressed() {
+        if (page != ROOT) {
+            showRoot();
+            enter(-1);
+            scroll.post(new Runnable() {
+                @Override public void run() { scroll.scrollTo(0, rootScroll); }
+            });
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    private void showRoot() {
+        Context c = this;
+        page = ROOT;
+        col.removeAllViews();
+        col.addView(header(c, "Настройки", "версия " + verName()));
+
+        // subscriptions are the one thing every user touches, so they get the big card on top
+        LinearLayout hero = new LinearLayout(c);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR, new int[]{Ui.ACCENT_TINT, Ui.SURFACE});
+        g.setCornerRadius(Ui.dp(c, 22));
+        g.setStroke(Ui.dp(c, 1), Ui.LINE2);
+        hero.setBackground(g);
+        hero.setClipToOutline(true);
+        View hr = menuRow(c, P_SUBS, true);
+        hero.addView(hr);
+        col.addView(hero, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 16));
+
+        col.addView(searchBox(c), Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
+
+        menuBody = new LinearLayout(c);
+        menuBody.setOrientation(LinearLayout.VERTICAL);
+        col.addView(menuBody);
+        renderMenu();
+    }
+
+    /** The grouped menu, or a flat list of matches while something is typed in search. */
+    private void renderMenu() {
+        Context c = this;
+        menuBody.removeAllViews();
+        String q = query.trim().toLowerCase();
+        if (q.isEmpty()) {
+            for (int gi = 0; gi < GROUPS.length; gi++) {
+                menuBody.addView(groupLabel(c, GROUP_NAMES[gi]));
+                menuBody.addView(group(c, GROUPS[gi]), Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+            }
+            return;
+        }
+        List<Integer> hits = new ArrayList<>();
+        for (int i = 0; i < TITLES.length; i++) {
+            String hay = (TITLES[i] + " " + subtitle(i) + " " + KEYS[i]).toLowerCase();
+            boolean all = true;
+            for (String w : q.split("\\s+")) if (!hay.contains(w)) { all = false; break; }
+            if (all) hits.add(i);
+        }
+        if (hits.isEmpty()) {
+            TextView none = Ui.text(c, "Ничего не нашлось", 14, Ui.MUTED, false);
+            none.setGravity(android.view.Gravity.CENTER);
+            none.setPadding(0, Ui.dp(c, 32), 0, 0);
+            menuBody.addView(none, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            return;
+        }
+        int[] ids = new int[hits.size()];
+        for (int i = 0; i < ids.length; i++) ids[i] = hits.get(i);
+        menuBody.addView(group(c, ids), Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 16));
+    }
+
+    private void open(int id) {
+        if (id == P_APPS) { startActivity(new Intent(this, AppsActivity.class)); return; }
+        if (id == P_HOME) { startActivity(new Intent(this, HomeLayoutActivity.class)); return; }
+        rootScroll = scroll.getScrollY();
+        hideKeyboard();
+        page = id;
+        Context c = this;
+        col.removeAllViews();
+        col.addView(header(c, TITLES[id], null));
+        switch (id) {
+            case P_SUBS: pageSubs(c, col); break;
+            case P_AUTO: pageAuto(c, col); break;
+            case P_ROUTE: pageRouting(c, col); break;
+            case P_SHARE: pageShare(c, col); break;
+            case P_SERVERS: pageServers(c, col); break;
+            case P_UPDATE: pageUpdate(c, col); renderUpdate(); break;
+            case P_LOG: pageLog(c, col); break;
+        }
+        scroll.scrollTo(0, 0);
+        enter(1);
+    }
+
+    /** Short slide in from the side the user is going to. */
+    private void enter(int dir) {
+        col.setAlpha(0f);
+        col.setTranslationX(Ui.dp(this, 24) * dir);
+        col.animate().alpha(1f).translationX(0).setDuration(180)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+    }
+
+    private void hideKeyboard() {
+        View f = getCurrentFocus();
+        if (f == null) return;
+        ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                .hideSoftInputFromWindow(f.getWindowToken(), 0);
+        f.clearFocus();
+    }
+
+    /** What is set inside a page right now, shown under its name in the menu. */
+    private String subtitle(int id) {
+        switch (id) {
+            case P_SUBS: {
+                int n = prefs.subUrls().size();
+                long upd = prefs.subUpdated();
+                String s = n + " " + plural(n, "подписка", "подписки", "подписок");
+                String srv = AppState.lastServers;
+                int dot = srv.indexOf(" ·");
+                if (!srv.isEmpty()) s += " · " + (dot > 0 ? srv.substring(0, dot) : srv).toLowerCase();
+                else s += upd == 0 ? " · ещё не загружались" : " · " + android.text.format.DateFormat.format("dd.MM HH:mm", upd);
+                return s;
+            }
+            case P_AUTO: return Prefs.MODE_WL.equals(prefs.mode()) ? "По белым спискам" : "По типу сети";
+            case P_ROUTE: return prefs.ruDirect() ? "Российские сайты напрямую" : "Весь трафик через VPN";
+            case P_APPS: {
+                int n = prefs.excludedApps().size();
+                return n == 0 ? "Все приложения через VPN" : "Напрямую: " + n;
+            }
+            case P_SHARE: return prefs.shareProxy() ? "Включена · порт " + Prefs.SHARE_PORT : "Выключена";
+            case P_HOME: return "Какие плашки и в каком порядке";
+            case P_SERVERS: return "Какие серверы в какой группе";
+            case P_UPDATE: return !Updater.newVersion.isEmpty() ? "Доступна версия " + Updater.newVersion : "Версия " + verName();
+            default: return "Что происходило с подключением";
+        }
+    }
+
+    private static String plural(int n, String one, String few, String many) {
+        int m10 = n % 10, m100 = n % 100;
+        if (m10 == 1 && m100 != 11) return one;
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+        return many;
+    }
+
+    private LinearLayout header(Context c, String title, String right) {
         LinearLayout top = Ui.row(c);
-        TextView back = Ui.text(c, "←", 24, Ui.FG, false);
-        back.setPadding(Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 16), Ui.dp(c, 4));
+        android.widget.FrameLayout back = new android.widget.FrameLayout(c);
+        back.setBackground(Ui.round(c, Ui.SURFACE, 14, Ui.LINE));
+        back.setForeground(ripple(c));
+        back.setClipToOutline(true);
         back.setContentDescription("Назад");
+        back.addView(new IconView(c, IconView.BACK, Ui.FG), new android.widget.FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), android.view.Gravity.CENTER));
         back.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { finish(); }
+            @Override public void onClick(View v) { onBackPressed(); }
         });
-        top.addView(back);
-        top.addView(Ui.text(c, "Настройки", 22, Ui.FG, true));
-        String vn = "?";
-        try { vn = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
-        TextView ver = Ui.text(c, "версия " + vn, 13, Ui.MUTED, false);
-        ver.setGravity(android.view.Gravity.END);
-        top.addView(ver, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        col.addView(top);
+        top.addView(back, new LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)));
+        TextView t = Ui.text(c, title, 22, Ui.FG, true);
+        t.setSingleLine(true);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        t.setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 8), 0);
+        top.addView(t, Ui.weight());
+        if (right != null) top.addView(Ui.text(c, right, 13, Ui.MUTED, false));
+        top.setPadding(0, 0, 0, Ui.dp(c, 8));
+        return top;
+    }
 
-        // Subscriptions
-        col.addView(section(c, "Подписки"));
+    private View searchBox(Context c) {
+        LinearLayout box = Ui.row(c);
+        box.setBackground(Ui.round(c, Ui.SURFACE, 18, Ui.LINE));
+        box.setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 6), 0);
+        box.setMinimumHeight(Ui.dp(c, 52));
+        box.addView(new IconView(c, IconView.SEARCH, Ui.MUTED), new LinearLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20)));
+        final EditText in = new EditText(c);
+        in.setBackground(null);
+        in.setHint("Поиск настроек");
+        in.setHintTextColor(0xFF6F6B82);
+        in.setTextColor(Ui.FG);
+        in.setTextSize(16);
+        in.setSingleLine(true);
+        in.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        in.setPadding(Ui.dp(c, 12), Ui.dp(c, 12), Ui.dp(c, 8), Ui.dp(c, 12));
+        in.setText(query);
+        box.addView(in, Ui.weight());
+        final android.widget.FrameLayout clear = new android.widget.FrameLayout(c);
+        clear.setContentDescription("Очистить поиск");
+        clear.addView(new IconView(c, IconView.CLEAR, Ui.MUTED), new android.widget.FrameLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18), android.view.Gravity.CENTER));
+        clear.setVisibility(query.isEmpty() ? View.GONE : View.VISIBLE);
+        clear.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { in.setText(""); hideKeyboard(); }
+        });
+        box.addView(clear, new LinearLayout.LayoutParams(Ui.dp(c, 40), Ui.dp(c, 40)));
+        in.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int d) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int d) { }
+            @Override public void afterTextChanged(android.text.Editable s) {
+                query = s.toString();
+                clear.setVisibility(query.isEmpty() ? View.GONE : View.VISIBLE);
+                renderMenu();
+            }
+        });
+        return box;
+    }
+
+    private TextView groupLabel(Context c, String s) {
+        TextView t = Ui.text(c, s, 13, Ui.MUTED, true);
+        t.setPadding(Ui.dp(c, 6), Ui.dp(c, 22), 0, 0);
+        return t;
+    }
+
+    private LinearLayout group(Context c, int[] ids) {
+        LinearLayout card = new LinearLayout(c);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(Ui.round(c, Ui.SURFACE, 22, Ui.LINE));
+        card.setClipToOutline(true);
+        for (int i = 0; i < ids.length; i++) {
+            if (i > 0) {
+                View d = new View(c);
+                d.setBackgroundColor(Ui.LINE);
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, Ui.dp(c, 0.7f)));
+                p.leftMargin = Ui.dp(c, 70);
+                card.addView(d, p);
+            }
+            card.addView(menuRow(c, ids[i], false));
+        }
+        return card;
+    }
+
+    private View menuRow(Context c, final int id, boolean big) {
+        LinearLayout row = Ui.row(c);
+        row.setPadding(Ui.dp(c, 14), Ui.dp(c, big ? 18 : 12), Ui.dp(c, 12), Ui.dp(c, big ? 18 : 12));
+        row.setMinimumHeight(Ui.dp(c, big ? 76 : 64));
+        row.setBackground(ripple(c));
+        row.setClickable(true);
+        row.setFocusable(true);
+
+        int color = COLORS[id];
+        android.widget.FrameLayout tile = new android.widget.FrameLayout(c);
+        tile.setBackground(Ui.round(c, (color & 0x00FFFFFF) | 0x26000000, big ? 15 : 13, 0));
+        int ic = big ? 26 : 22;
+        tile.addView(new IconView(c, ICONS[id], color), new android.widget.FrameLayout.LayoutParams(Ui.dp(c, ic), Ui.dp(c, ic), android.view.Gravity.CENTER));
+        int ts = big ? 46 : 42;
+        row.addView(tile, new LinearLayout.LayoutParams(Ui.dp(c, ts), Ui.dp(c, ts)));
+
+        LinearLayout text = new LinearLayout(c);
+        text.setOrientation(LinearLayout.VERTICAL);
+        text.setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 8), 0);
+        TextView title = Ui.text(c, TITLES[id], big ? 18 : 16, Ui.FG, true);
+        title.setSingleLine(true);
+        text.addView(title);
+        String subText = subtitle(id);
+        boolean news = id == P_UPDATE && !Updater.newVersion.isEmpty();
+        TextView sub = Ui.text(c, subText, 13, news ? Ui.ACCENT : Ui.MUTED, false);
+        sub.setSingleLine(true);
+        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        text.addView(sub, Ui.lp(c, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 2));
+        row.addView(text, Ui.weight());
+
+        row.addView(new IconView(c, IconView.CHEVRON, 0xFF6F6B82), new LinearLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18)));
+        row.setContentDescription(TITLES[id] + ". " + subText);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { open(id); }
+        });
+        return row;
+    }
+
+    private static android.graphics.drawable.RippleDrawable ripple(Context c) {
+        return new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x1FFFFFFF),
+                null, new android.graphics.drawable.ColorDrawable(0xFFFFFFFF));
+    }
+
+    private void pageSubs(Context c, LinearLayout col) {
         LinearLayout sub = Ui.card(c);
         subList = new LinearLayout(c);
         subList.setOrientation(LinearLayout.VERTICAL);
@@ -134,9 +413,9 @@ public class SettingsActivity extends Activity {
         });
         sub.addView(save, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
         col.addView(sub, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+    }
 
-        // Auto selection
-        col.addView(section(c, "Автовыбор"));
+    private void pageAuto(Context c, LinearLayout col) {
         LinearLayout auto = Ui.card(c);
         auto.addView(Ui.text(c, "Как выбирать серверы", 15, Ui.FG, true));
         LinearLayout seg = Ui.row(c);
@@ -159,9 +438,9 @@ public class SettingsActivity extends Activity {
         auto.addView(Ui.text(c, "Белые списки проверяются раз в 2 минуты и при смене сети: если Google и Cloudflare не открываются, а Госуслуги и ya.ru открываются — списки включены.", 13, Ui.MUTED, false));
         col.addView(auto, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
         renderMode();
+    }
 
-        // Routing
-        col.addView(section(c, "Маршрутизация"));
+    private void pageRouting(Context c, LinearLayout col) {
         LinearLayout rt = Ui.card(c);
         rt.addView(switchRow(c, "Российские сайты без VPN", ".ru, .рф, .su и российские сервисы", prefs.ruDirect(), new Toggle() {
             @Override public void set(boolean v) { prefs.ruDirect(v); }
@@ -173,9 +452,9 @@ public class SettingsActivity extends Activity {
         rt.addView(Ui.divider(c));
         rt.addView(Ui.text(c, "Изменения применятся после переподключения.", 13, Ui.MUTED, false));
         col.addView(rt, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+    }
 
-        // Sharing the VPN with hotspot clients
-        col.addView(section(c, "Раздача"));
+    private void pageShare(Context c, LinearLayout col) {
         LinearLayout sh = Ui.card(c);
         sh.addView(switchRow(c, "VPN для точки доступа", "Прокси для устройств, подключённых к телефону", prefs.shareProxy(), new Toggle() {
             @Override public void set(boolean v) {
@@ -211,50 +490,15 @@ public class SettingsActivity extends Activity {
         sh.addView(shareButtons, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
         col.addView(sh, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
         renderShare();
+    }
 
-        // Main screen builder
-        col.addView(section(c, "Внешний вид"));
-        LinearLayout home = Ui.card(c);
-        LinearLayout homeRow = Ui.row(c);
-        LinearLayout homeText = new LinearLayout(c);
-        homeText.setOrientation(LinearLayout.VERTICAL);
-        homeText.addView(Ui.text(c, "Главный экран", 15, Ui.FG, true));
-        homeText.addView(Ui.text(c, "Какие плашки показывать и в каком порядке", 13, Ui.MUTED, false));
-        homeRow.addView(homeText, Ui.weight());
-        homeRow.addView(Ui.text(c, "›", 24, Ui.MUTED, false));
-        homeRow.setMinimumHeight(Ui.dp(c, 48));
-        homeRow.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { startActivity(new Intent(SettingsActivity.this, HomeLayoutActivity.class)); }
-        });
-        home.addView(homeRow);
-        col.addView(home, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
-
-        // Apps
-        col.addView(section(c, "Приложения"));
-        LinearLayout apps = Ui.card(c);
-        LinearLayout appsRow = Ui.row(c);
-        LinearLayout appsText = new LinearLayout(c);
-        appsText.setOrientation(LinearLayout.VERTICAL);
-        appsText.addView(Ui.text(c, "Приложения без VPN", 15, Ui.FG, true));
-        appsCount = Ui.text(c, "", 13, Ui.MUTED, false);
-        appsText.addView(appsCount);
-        appsRow.addView(appsText, Ui.weight());
-        appsRow.addView(Ui.text(c, "›", 24, Ui.MUTED, false));
-        appsRow.setMinimumHeight(Ui.dp(c, 48));
-        appsRow.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { startActivity(new Intent(SettingsActivity.this, AppsActivity.class)); }
-        });
-        apps.addView(appsRow);
-        col.addView(apps, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
-
-        // Servers
-        col.addView(section(c, "Серверы из подписки"));
+    private void pageServers(Context c, LinearLayout col) {
         LinearLayout srv = Ui.card(c);
         srv.addView(Ui.text(c, serversText(), 13, Ui.FG, false));
         col.addView(srv, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+    }
 
-        // Update
-        col.addView(section(c, "Обновление"));
+    private void pageUpdate(Context c, LinearLayout col) {
         LinearLayout updCard = Ui.card(c);
         updStatus = Ui.text(c, "", 13, Ui.MUTED, false);
         updCard.addView(updStatus);
@@ -272,14 +516,14 @@ public class SettingsActivity extends Activity {
         });
         updCard.addView(updBtn, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
         col.addView(updCard, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+    }
 
-        // Log
-        col.addView(section(c, "Журнал"));
+    private void pageLog(Context c, LinearLayout col) {
         LinearLayout lg = Ui.card(c);
         logView = Ui.text(c, "", 11, Ui.MUTED, false);
         logView.setTypeface(Typeface.MONOSPACE);
         logView.setTextIsSelectable(true);
-        lg.addView(logView);
+        // the button goes first: the log is up to 200 lines long
         TextView copy = Ui.button(c, "Скопировать журнал", false);
         copy.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
@@ -288,15 +532,16 @@ public class SettingsActivity extends Activity {
                 Toast.makeText(SettingsActivity.this, "Журнал скопирован", Toast.LENGTH_SHORT).show();
             }
         });
-        lg.addView(copy, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
-        col.addView(lg, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+        col.addView(copy, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+        lg.addView(logView);
+        col.addView(lg, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
         logView.setText(logText());
     }
 
     @Override protected void onResume() {
         super.onResume();
-        int n = prefs.excludedApps().size();
-        if (appsCount != null) appsCount.setText(n == 0 ? "Все приложения идут через VPN" : "Напрямую: " + n);
+        // values on the menu (apps count, share on/off) may have changed in another screen
+        if (page == ROOT) showRoot();
         renderShare();
         updHandler.post(updTicker);
     }
@@ -484,13 +729,6 @@ public class SettingsActivity extends Activity {
         modeHint.setText(wl
                 ? "Белые списки включены — LTE, выключены — обычные. Тип сети не важен. Если группа не отвечает, берётся другая."
                 : "Wi-Fi — обычные, мобильная сеть — LTE. Если группа не отвечает, берётся другая.");
-    }
-
-    private TextView section(Context c, String s) {
-        TextView t = Ui.text(c, s.toUpperCase(), 12, Ui.MUTED, true);
-        t.setLetterSpacing(0.08f);
-        t.setPadding(Ui.dp(c, 4), Ui.dp(c, 24), 0, 0);
-        return t;
     }
 
     private void reconnect() {
