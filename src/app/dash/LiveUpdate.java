@@ -23,12 +23,32 @@ final class LiveUpdate {
         return Build.VERSION.SDK_INT >= 36;
     }
 
-    static void request(Notification.Builder b) {
+    static void request(Context c, Notification.Builder b) {
         if (!supported()) return;
         b.getExtras().putBoolean(EXTRA_REQUEST, true);
         try {
             Notification.Builder.class.getMethod("setRequestPromotedOngoing", boolean.class).invoke(b, true);
         } catch (Throwable ignored) {
+        }
+        // Samsung shows other apps' Live Updates in the Now Bar only with "Live notifications for all apps"
+        // (a developer option). Without it, it still takes ones marked as an automation and shows them
+        // under "Gemini Intelligence": that is how StealthSurf gets there.
+        if (samsung() && !samsungAllApps(c)) {
+            b.getExtras().putBoolean("android.ongoingActivityNoti.automation", true);
+            b.getExtras().putString("android.ongoingActivityNoti.automationPackage", c.getPackageName());
+        }
+    }
+
+    static boolean samsung() {
+        return supported() && "samsung".equalsIgnoreCase(Build.MANUFACTURER);
+    }
+
+    /** Samsung's developer option "Live notifications for all apps". */
+    static boolean samsungAllApps(Context c) {
+        try {
+            return "1".equals(android.provider.Settings.Secure.getString(c.getContentResolver(), "enable_notification_nowbar_test"));
+        } catch (Throwable t) {
+            return false;
         }
     }
 
@@ -78,6 +98,7 @@ final class LiveUpdate {
         if (!supported()) return "Android " + Build.VERSION.RELEASE + ": живые уведомления появились только в Android 16";
         Boolean a = allowed(c), s = shown(c, id);
         return "Android " + Build.VERSION.RELEASE + " · разрешены: " + yesNo(a)
+                + (samsung() ? " · Samsung, для всех приложений: " + yesNo(samsungAllApps(c)) : "")
                 + " · сейчас в строке состояния: " + (s == null ? "VPN выключен" : yesNo(s));
     }
 
