@@ -36,8 +36,11 @@ import java.net.URL;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -524,6 +527,7 @@ public class BoxVpnService extends VpnService {
             deadCount = 0;
             AppState.ping = d;
             AppState.changed();
+            maybeLoadCheck(tag);
             if (d >= SLOW_MS && System.currentTimeMillis() - lastFasterCheck > FASTER_CHECK_EVERY_MS) {
                 lastFasterCheck = System.currentTimeMillis();
                 preferFaster(group, clash.testGroup(group, 5000));
@@ -556,6 +560,113 @@ public class BoxVpnService extends VpnService {
             Server n = byTag.get(now);
             AppState.banner("Сервер перестал отвечать — переключено на " + (n != null ? n.name : now), 2);
         }
+    }
+
+    /* ---------- load check: a server can answer pings and still stall every real download ---------- */
+
+    private static final long LOAD_EVERY_MS = 5 * 60 * 1000L;
+    /** How long a server that failed the load check is left out of the automatic choice. */
+    private static final long FROZEN_MS = 15 * 60 * 1000L;
+    private final Map<String, Long> frozen = new ConcurrentHashMap<>();
+    private volatile boolean loadBusy;
+    private volatile int loadFails;
+    private volatile long lastLoad;
+    private String lastLoadTag = "";
+
+    /** Servers that failed the load check recently. */
+    private Set<String> frozenNow() {
+        long now = System.currentTimeMillis();
+        Set<String> out = new HashSet<>();
+        for (Map.Entry<String, Long> e : frozen.entrySet()) {
+            if (e.getValue() > now) out.add(e.getKey());
+            else frozen.remove(e.getKey());
+        }
+        return out;
+    }
+
+    /**
+     * Called by the watchdog after the server in use answered (a manual pin is left alone). Every few minutes,
+     * and right after the server changes, a small file has to come through it in full. After two failures in a
+     * row the server is left out for a while and traffic moves to the best server that passes the same check.
+     */
+    private void maybeLoadCheck(final String tag) {
+        if (loadBusy || speedBusy) return;
+        long now = System.currentTimeMillis();
+        if (tag.equals(lastLoadTag) && loadFails == 0 && now - lastLoad < LOAD_EVERY_MS) return;
+        lastLoad = now;
+        lastLoadTag = tag;
+        loadBusy = true;
+        final Clash c = clash;
+        final String group = activeGroup;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    loadCheck(c, group, tag);
+                } catch (Throwable t) {
+                    AppState.log("Проверка загрузки: " + t.getMessage());
+                } finally {
+                    loadBusy = false;
+                }
+            }
+        }, "load-check").start();
+    }
+
+    private void loadCheck(final Clash c, final String group, final String tag) throws Exception {
+        if (Speed.loads(ConfigBuilder.SPEED_PORT, tag, c.secret())) {
+            loadFails = 0;
+            return;
+        }
+        if (!running || c != clash) return;
+        final String name = nameOf(tag);
+        AppState.log("Сервер " + name + " отвечает, но не пропускает загрузку (" + (loadFails + 1) + ")");
+        if (++loadFails < 2) return;
+        loadFails = 0;
+        frozen.put(tag, System.currentTimeMillis() + FROZEN_MS);
+        String pick = null;
+        for (String t : Speed.spares(c.members(group), c.delays(), frozenNow())) {
+            if (!running || c != clash) return;
+            if (Speed.loads(ConfigBuilder.SPEED_PORT, t, c.secret())) {
+                pick = t;
+                break;
+            }
+            frozen.put(t, System.currentTimeMillis() + FROZEN_MS);
+            AppState.log("Сервер " + nameOf(t) + " тоже не пропускает загрузку");
+        }
+        final String best = pick;
+        exec.execute(new Runnable() {
+            @Override public void run() {
+                try {
+                    applyLoadPick(c, group, tag, name, best);
+                } catch (Throwable t) {
+                    AppState.log("Проверка загрузки: " + t.getMessage());
+                }
+            }
+        });
+    }
+
+    private void applyLoadPick(Clash c, String group, String tag, String name, String best) throws Exception {
+        if (!running || c != clash || AppState.vpn != AppState.ON || AppState.switching
+                || !group.equals(activeGroup) || pinnedTag() != null) return;
+        String inUse = autoTag != null ? autoTag : c.now(group);
+        if (!tag.equals(inUse)) return;
+        if (best == null) {
+            AppState.banner("Сервер " + name + " почти не пропускает трафик, замены не нашлось", 2);
+            return;
+        }
+        c.select(ConfigBuilder.SELECTOR, best);
+        autoTag = best;
+        deadCount = 0;
+        try {
+            c.closeAll(); // connections stuck on the stalled server: reopen through the new one
+        } catch (Exception ignored) {
+        }
+        refreshStatus();
+        AppState.banner("Сервер " + name + " перестал пропускать трафик — переключено на " + nameOf(best), 2);
+    }
+
+    private String nameOf(String tag) {
+        Server s = byTag.get(tag);
+        return s != null ? s.name : tag;
     }
 
     /* ---------- automatic choice: move to a clearly faster server ---------- */
@@ -639,7 +750,7 @@ public class BoxVpnService extends VpnService {
         final Clash c = clash;
         final String group = activeGroup;
         final String cur = c.now(group);
-        final List<String> picks = Speed.picks(c.members(group), c.delays(), cur);
+        final List<String> picks = Speed.picks(c.members(group), c.delays(), cur, frozenNow());
         if (picks.size() < 2) return;
         speedBusy = true;
         lastSpeed = System.currentTimeMillis();
@@ -698,6 +809,7 @@ public class BoxVpnService extends VpnService {
             deadCount = 0;
             AppState.ping = d;
             AppState.changed();
+            maybeLoadCheck(tag);
             return;
         }
         deadCount++;
@@ -1526,6 +1638,9 @@ public class BoxVpnService extends VpnService {
         boolean changed = !AppState.net.equals(before) || (underlying == null) != (beforeNet == null)
                 || (underlying != null && !underlying.equals(beforeNet));
         if (changed) {
+            frozen.clear(); // another network may not stall the same servers
+            loadFails = 0;
+            lastLoad = 0;
             AppState.log("Сеть: " + netName());
             AppState.changed();
             if (AppState.vpn == AppState.ON || AppState.vpn == AppState.WAITING) scheduleReevaluate("net", 1500);

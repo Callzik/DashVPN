@@ -68,6 +68,13 @@ type Core struct {
 	speedBusy bool
 	lastSpeed time.Time
 
+	// load check: servers that answer pings but stall downloads are left out until the time in frozen
+	frozen      map[string]time.Time
+	loadBusy    bool
+	loadFails   int
+	lastLoad    time.Time
+	lastLoadTag string
+
 	serverName, group  string
 	ping, alive, gsize int
 	pinned             string
@@ -1057,6 +1064,7 @@ func (c *Core) loops(g int) {
 			// a long gap between ticks means the PC was asleep: old connections are dead
 			if time.Since(last) > 30*time.Second {
 				c.log.Add("Выход из сна — проверка соединения")
+				c.clearFrozen() // the PC may have woken up on another network
 				if cl := c.cl(); cl != nil {
 					cl.CloseAll()
 				}
@@ -1106,6 +1114,7 @@ func (c *Core) watch(g int) {
 			c.lastFasterCheck = time.Now()
 		}
 		c.mu.Unlock()
+		c.maybeLoadCheck(g, tag)
 		if check {
 			c.preferFaster(g, cl, group, cl.TestGroup(group, 5000))
 		}
@@ -1152,6 +1161,7 @@ func (c *Core) watchAuto(g int, cl *Clash, group, tag string) {
 		c.mu.Lock()
 		c.deadCount, c.ping = 0, d
 		c.mu.Unlock()
+		c.maybeLoadCheck(g, tag)
 		return
 	}
 	c.mu.Lock()

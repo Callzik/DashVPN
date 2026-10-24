@@ -14,55 +14,80 @@ import (
 // SpeedURL is the test download for the speed check; a var so the Linux test build can use a local file.
 var SpeedURL = "https://speed.cloudflare.com/__down?bytes=2000000"
 
+// LoadURL is the load check's file: a server can answer the watchdog's tiny ping request and still stall every
+// real download (censors freeze such connections after the first 16–20 KB), so a small file has to arrive in full.
+var LoadURL = "https://speed.cloudflare.com/__down?bytes=131072"
+
 const (
 	speedCandidates = 3               // best servers by ping that get a test download
 	speedWindow     = 4 * time.Second // a download stops after this long even if unfinished
 	speedEvery      = 3 * time.Minute // at most one speed check per this period
+
+	loadMin    = 100 * 1024       // bytes a load check must get
+	loadWindow = 10 * time.Second // a load check stops after this long
+	loadEvery  = 5 * time.Minute  // a load check of the server in use at least this often
+	frozenFor  = 15 * time.Minute // a server that failed the load check is left out this long
 )
 
 // MeasureSpeed downloads SpeedURL through one server and returns Mbit/s, 0 on failure.
 // The core's speed-in proxy sends each login (= server tag) to that server only.
 func MeasureSpeed(port int, tag, secret string) float64 {
+	_, n, el := download(SpeedURL, speedWindow, port, tag, secret)
+	if n < 64*1024 || el <= 0 {
+		return 0
+	}
+	return float64(n) * 8 / el / 1e6
+}
+
+// LoadOK: the load check file comes through one server in full.
+func LoadOK(port int, tag, secret string) bool {
+	all, _, _ := download(LoadURL, loadWindow, port, tag, secret)
+	return all >= loadMin
+}
+
+// download reads u through one server for up to window after the first data and returns all bytes,
+// the bytes after the first chunk and the seconds since the first chunk.
+func download(u string, window time.Duration, port int, tag, secret string) (int64, int64, float64) {
 	pu := &url.URL{Scheme: "http", User: url.UserPassword(tag, secret), Host: "127.0.0.1:" + strconv.Itoa(port)}
 	tr := &http.Transport{Proxy: http.ProxyURL(pu), DisableKeepAlives: true,
 		TLSHandshakeTimeout: 6 * time.Second, ResponseHeaderTimeout: 6 * time.Second}
 	defer tr.CloseIdleConnections()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "GET", SpeedURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
-		return 0
+		return 0, 0, 0
 	}
 	resp, err := (&http.Client{Transport: tr}).Do(req)
 	if err != nil {
-		return 0
+		return 0, 0, 0
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return 0
+		return 0, 0, 0
 	}
 	// the clock starts at the first data, so the server's ping does not count against its speed
 	buf := make([]byte, 32*1024)
 	var start time.Time
-	var n int64
+	var all, n int64
 	for {
 		k, err := resp.Body.Read(buf)
 		if k > 0 {
+			all += int64(k)
 			if start.IsZero() {
 				start = time.Now()
 			} else {
 				n += int64(k)
 			}
 		}
-		if err != nil || !start.IsZero() && time.Since(start) > speedWindow {
+		if err != nil || !start.IsZero() && time.Since(start) > window {
 			break
 		}
 	}
-	el := time.Since(start).Seconds()
-	if start.IsZero() || n < 64*1024 || el <= 0 {
-		return 0
+	if start.IsZero() {
+		return 0, 0, 0
 	}
-	return float64(n) * 8 / el / 1e6
+	return all, n, time.Since(start).Seconds()
 }
 
 // Delays: last measured delay of every outbound in one call (tag → ms, failed and untested left out).
@@ -88,18 +113,9 @@ func (c *Clash) Delays() map[string]int {
 	return out
 }
 
-// speedPicks: the best few members of a group by ping, plus the current one.
-func speedPicks(members []string, delays map[string]int, cur string) []string {
-	var alive []string
-	for _, t := range members {
-		if delays[t] > 0 {
-			alive = append(alive, t)
-		}
-	}
-	sort.SliceStable(alive, func(i, j int) bool { return delays[alive[i]] < delays[alive[j]] })
-	if len(alive) > speedCandidates {
-		alive = alive[:speedCandidates]
-	}
+// speedPicks: the best few members of a group by ping that are not in skip, plus the current one.
+func speedPicks(members []string, delays map[string]int, cur string, skip map[string]bool) []string {
+	alive := spares(members, delays, skip)
 	if cur != "" {
 		for _, t := range alive {
 			if t == cur {
@@ -107,6 +123,21 @@ func speedPicks(members []string, delays map[string]int, cur string) []string {
 			}
 		}
 		alive = append(alive, cur)
+	}
+	return alive
+}
+
+// spares: the best few members of a group by ping that answer and are not in skip.
+func spares(members []string, delays map[string]int, skip map[string]bool) []string {
+	var alive []string
+	for _, t := range members {
+		if delays[t] > 0 && !skip[t] {
+			alive = append(alive, t)
+		}
+	}
+	sort.SliceStable(alive, func(i, j int) bool { return delays[alive[i]] < delays[alive[j]] })
+	if len(alive) > speedCandidates {
+		alive = alive[:speedCandidates]
 	}
 	return alive
 }
@@ -162,7 +193,7 @@ func (c *Core) speedCheck(g int) {
 		return
 	}
 	cur := cl.Now(group)
-	picks := speedPicks(cl.Members(group), cl.Delays(), cur)
+	picks := speedPicks(cl.Members(group), cl.Delays(), cur, c.frozenNow())
 	if len(picks) < 2 {
 		return
 	}

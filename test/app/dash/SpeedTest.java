@@ -2,8 +2,10 @@ package app.dash;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Choice rules of the speed check. */
 public final class SpeedTest {
@@ -16,6 +18,11 @@ public final class SpeedTest {
         List<String> members = Arrays.asList("srv1", "srv2", "srv3", "srv4", "srv5");
         check(Speed.picks(members, d, "srv2").equals(Arrays.asList("srv5", "srv2", "srv3")), "current among the best");
         check(Speed.picks(members, d, "srv1").equals(Arrays.asList("srv5", "srv2", "srv3", "srv1")), "current added");
+        Set<String> frozen = new HashSet<>(Arrays.asList("srv5"));
+        check(Speed.picks(members, d, "srv2", frozen).equals(Arrays.asList("srv2", "srv3", "srv1")), "stalled server left out");
+        check(Speed.spares(members, d, new HashSet<>(Arrays.asList("srv5", "srv2"))).equals(Arrays.asList("srv3", "srv1")),
+                "spares skip the stalled and the current");
+        check(Speed.spares(members, d, new HashSet<>(members)).isEmpty(), "no spares");
 
         check("b".equals(Speed.faster(speeds("a", 3, "b", 40, "c", 20), "a")), "overloaded current");
         check(Speed.faster(speeds("a", 30, "b", 40), "a") == null, "not 1.5 times faster");
