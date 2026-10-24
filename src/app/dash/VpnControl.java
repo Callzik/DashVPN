@@ -26,7 +26,7 @@ final class VpnControl {
             AppState.addListener(new Runnable() {
                 private String last = "";
                 @Override public void run() {
-                    String key = AppState.vpn + "|" + AppState.serverName + "|" + AppState.ping + "|" + AppState.phase;
+                    String key = AppState.vpn + "|" + AppState.pausedUntil + "|" + AppState.serverName + "|" + AppState.ping + "|" + AppState.phase;
                     if (key.equals(last)) return;
                     last = key;
                     refreshOutside(app);
@@ -79,7 +79,9 @@ final class VpnControl {
                 return AppState.ping > 0 ? s + " · " + AppState.ping + " мс" : s;
             case AppState.CONNECTING: return "Подключение…";
             case AppState.WAITING: return "Нет ответа, ожидание";
-            default: return AppState.error.isEmpty() ? "Выключен" : "Ошибка";
+            default:
+                if (AppState.pausedUntil > 0) return "Пауза";
+                return AppState.error.isEmpty() ? "Выключен" : "Ошибка";
         }
     }
 }

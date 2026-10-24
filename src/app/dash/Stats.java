@@ -174,6 +174,16 @@ final class Stats {
         return String.format(Locale.ROOT, "%.2f", m);
     }
 
+    /** Bytes/s for the notification, e.g. "1,2 КБ/с". */
+    static String rate(long b) {
+        if (b < 1024) return b + " Б/с";
+        double k = b / 1024.0;
+        Locale ru = new Locale("ru");
+        if (k < 1024) return String.format(ru, k < 10 ? "%.1f КБ/с" : "%.0f КБ/с", k);
+        double m = k / 1024;
+        return String.format(ru, m < 10 ? "%.1f МБ/с" : "%.0f МБ/с", m);
+    }
+
     static String bytes(long b) {
         if (b < 1024) return b + " Б";
         double k = b / 1024.0;
