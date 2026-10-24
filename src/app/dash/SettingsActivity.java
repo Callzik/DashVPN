@@ -35,13 +35,13 @@ public class SettingsActivity extends Activity {
     };
 
     private static final int ROOT = -1, P_SUBS = 0, P_AUTO = 1, P_ROUTE = 2, P_APPS = 3, P_SHARE = 4,
-            P_HOME = 5, P_SERVERS = 6, P_UPDATE = 7, P_LOG = 8;
+            P_HOME = 5, P_SERVERS = 6, P_UPDATE = 7, P_LOG = 8, P_ISLAND = 9;
     private static final String[] TITLES = {"Подписки", "Автовыбор серверов", "Маршрутизация",
-            "Приложения без VPN", "Раздача VPN", "Главный экран", "Серверы из подписки", "Обновление", "Журнал"};
+            "Приложения без VPN", "Раздача VPN", "Главный экран", "Серверы из подписки", "Обновление", "Журнал", "Остров и Now Bar"};
     private static final int[] ICONS = {IconView.SUBS, IconView.AUTO, IconView.ROUTE, IconView.APPS,
-            IconView.SHARE, IconView.HOME, IconView.SERVERS, IconView.UPDATE, IconView.LOG};
+            IconView.SHARE, IconView.HOME, IconView.SERVERS, IconView.UPDATE, IconView.LOG, IconView.ISLAND};
     private static final int[] COLORS = {Ui.ACCENT, 0xFFF2B544, 0xFF5AA9FF, 0xFFFF9F6B,
-            0xFF4FD1C5, 0xFFF27BB0, 0xFFB48CFF, 0xFF6BD68A, 0xFFF0716B};
+            0xFF4FD1C5, 0xFFF27BB0, 0xFFB48CFF, 0xFF6BD68A, 0xFFF0716B, 0xFF5AA9FF};
     /** Extra words the search finds a page by: what is inside it, not only its title. */
     private static final String[] KEYS = {
             "ссылка подписка ключ vless добавить удалить вставить обновить переподключить",
@@ -52,8 +52,9 @@ public class SettingsActivity extends Activity {
             "плашки порядок оформление вид главный",
             "список серверов обычные lte не участвуют заглушка",
             "версия обновить установить загрузка apk",
-            "лог журнал ошибки диагностика скопировать поддержка"};
-    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_SHARE}, {P_HOME}, {P_SERVERS, P_UPDATE, P_LOG}};
+            "лог журнал ошибки диагностика скопировать поддержка",
+            "уведомление остров живые уведомления live update строка состояния samsung самсунг"};
+    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_SHARE}, {P_HOME, P_ISLAND}, {P_SERVERS, P_UPDATE, P_LOG}};
     private static final String[] GROUP_NAMES = {"Подключение", "Внешний вид", "О приложении"};
 
     private ScrollView scroll;
@@ -164,6 +165,7 @@ public class SettingsActivity extends Activity {
             case P_SERVERS: pageServers(c, col); break;
             case P_UPDATE: pageUpdate(c, col); renderUpdate(); break;
             case P_LOG: pageLog(c, col); break;
+            case P_ISLAND: pageIsland(c, col); break;
         }
         scroll.scrollTo(0, 0);
         enter(1);
@@ -207,6 +209,11 @@ public class SettingsActivity extends Activity {
             case P_SHARE: return prefs.shareProxy() ? "Включена · порт " + Prefs.SHARE_PORT : "Выключена";
             case P_HOME: return "Какие плашки и в каком порядке";
             case P_SERVERS: return "Какие серверы в какой группе";
+            case P_ISLAND: {
+                Boolean a = LiveUpdate.allowed(this);
+                if (!LiveUpdate.supported()) return "Нужен Android 16";
+                return a == null ? "Уведомление VPN в строке состояния" : a ? "Разрешены" : "Выключены в системе";
+            }
             case P_UPDATE: return !Updater.newVersion.isEmpty() ? "Доступна версия " + Updater.newVersion : "Версия " + verName();
             default: return "Что происходило с подключением";
         }
@@ -518,6 +525,23 @@ public class SettingsActivity extends Activity {
         col.addView(updCard, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
     }
 
+    private TextView islandStatus;
+
+    private void pageIsland(Context c, LinearLayout col) {
+        LinearLayout card = Ui.card(c);
+        card.addView(Ui.text(c, "Пока VPN включён, Dash просит систему показывать его уведомление как живое: "
+                + "таблеткой в строке состояния и в Now Bar на Samsung. Если его там нет, разрешите живые "
+                + "уведомления для Dash в настройках телефона.", 13, Ui.FG, false));
+        islandStatus = Ui.text(c, LiveUpdate.status(c, BoxVpnService.NOTIFY_ID), 12, Ui.MUTED, false);
+        card.addView(islandStatus, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
+        col.addView(card, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+        TextView open = Ui.button(c, "Открыть настройки уведомлений", false);
+        open.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { LiveUpdate.openSettings(SettingsActivity.this); }
+        });
+        col.addView(open, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
+    }
+
     private void pageLog(Context c, LinearLayout col) {
         LinearLayout lg = Ui.card(c);
         logView = Ui.text(c, "", 11, Ui.MUTED, false);
@@ -542,6 +566,8 @@ public class SettingsActivity extends Activity {
         super.onResume();
         // values on the menu (apps count, share on/off) may have changed in another screen
         if (page == ROOT) showRoot();
+        // back from the system's notification settings
+        if (page == P_ISLAND && islandStatus != null) islandStatus.setText(LiveUpdate.status(this, BoxVpnService.NOTIFY_ID));
         renderShare();
         updHandler.post(updTicker);
     }
