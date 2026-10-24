@@ -1971,6 +1971,8 @@ public class BoxVpnService extends VpnService {
         }
         b.addAction(action("Отключить", ACTION_STOP, 1));
         LiveUpdate.request(b);
+        if (paused) LiveUpdate.chip(b, "Пауза");
+        else if (when > 0) LiveUpdate.chip(b, chipTime(System.currentTimeMillis() - when));
         return b.build();
     }
 
@@ -2020,6 +2022,13 @@ public class BoxVpnService extends VpnService {
     }
 
     private boolean liveLogged;
+
+    /** Fits the status bar chip: "<1 мин", "12 мин", "1 ч 5". */
+    private static String chipTime(long ms) {
+        long m = Math.max(0, ms) / 60000;
+        if (m < 60) return since(ms);
+        return m / 60 + " ч " + m % 60;
+    }
 
     /** "<1 мин", "12 мин", "1 ч 5 мин". */
     private static String since(long ms) {
