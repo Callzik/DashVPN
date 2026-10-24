@@ -412,9 +412,14 @@ public class MainActivity extends Activity {
                 subtitle.setText(AppState.phase);
                 break;
             default:
-                title.setText("Отключено");
                 String net = currentNetGuess();
-                subtitle.setText("none".equals(net) ? "Нет сети" : "Нажмите, чтобы включить");
+                title.setText(AppState.pausedUntil > 0 ? "Пауза" : "Отключено");
+                if (AppState.pausedUntil > 0) {
+                    subtitle.setText("Включится сам в " + new java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT)
+                            .format(new java.util.Date(AppState.pausedUntil)));
+                } else {
+                    subtitle.setText("none".equals(net) ? "Нет сети" : "Нажмите, чтобы включить");
+                }
         }
         errorText.setText(s == AppState.OFF ? AppState.error : "");
         errorText.setVisibility(s == AppState.OFF && !AppState.error.isEmpty() ? View.VISIBLE : View.GONE);

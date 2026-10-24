@@ -19,6 +19,8 @@ public final class AppState {
     public static volatile int vpn = OFF;
     public static volatile String phase = "";
     public static volatile long since;
+    /** Paused from the notification: when the VPN turns back on, 0 = not paused. */
+    public static volatile long pausedUntil;
     public static volatile String net = "none";      // wifi | cell | other | none
     public static volatile int wl = WL_UNKNOWN;
     public static volatile boolean wlChecking;

@@ -1,5 +1,6 @@
 package app.dash;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -46,6 +47,9 @@ import java.util.concurrent.TimeUnit;
 public class BoxVpnService extends VpnService {
     public static final String ACTION_START = "app.dash.START";
     public static final String ACTION_STOP = "app.dash.STOP";
+    public static final String ACTION_PAUSE = "app.dash.PAUSE";
+    public static final String ACTION_SWITCH = "app.dash.SWITCH";
+    private static final long PAUSE_MS = 5 * 60 * 1000L;
     private static final String CHANNEL = "vpn";
     private static final int NOTIFY_ID = 1;
 
@@ -88,6 +92,16 @@ public class BoxVpnService extends VpnService {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? ACTION_START : intent.getAction();
+        if (ACTION_PAUSE.equals(action)) {
+            pause();
+            return START_STICKY;
+        }
+        if (ACTION_SWITCH.equals(action)) {
+            if (running) switchNext();
+            else if (AppState.pausedUntil == 0) stopSelf();
+            return START_STICKY;
+        }
+        cancelPause();
         if (ACTION_STOP.equals(action)) {
             stopVpn("Отключено");
             if (AppState.vpn != AppState.OFF) {
@@ -110,6 +124,7 @@ public class BoxVpnService extends VpnService {
     @Override
     public void onDestroy() {
         instance = null;
+        cancelPause();
         stopVpn(null);
         super.onDestroy();
     }
@@ -122,6 +137,7 @@ public class BoxVpnService extends VpnService {
         VpnControl.init(this);
         cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         exec = Executors.newSingleThreadScheduledExecutor();
+        startTicker();
         AppState.vpn = AppState.CONNECTING;
         AppState.error = "";
         AppState.phase = "Загрузка подписки";
@@ -155,12 +171,18 @@ public class BoxVpnService extends VpnService {
         return true;
     }
 
-    private synchronized void stopVpn(String reason) {
+    private void stopVpn(String reason) {
+        stopVpn(reason, false);
+    }
+
+    /** keepService: the pause, the service stays in the foreground with its notification. */
+    private synchronized void stopVpn(String reason, boolean keepService) {
         if (!running) return;
         running = false;
         stopping = true;
         if (reason != null) AppState.log(reason);
         if (exec != null) exec.shutdownNow();
+        if (ticker != null) ticker.shutdownNow();
         if (helperIn != null) {
             try {
                 helperIn.write("stop\n".getBytes());
@@ -200,6 +222,7 @@ public class BoxVpnService extends VpnService {
         AppState.serverName = "";
         AppState.ping = -1;
         AppState.changed();
+        if (keepService) return;
         stopForeground(true);
         stopSelf();
     }
@@ -786,6 +809,58 @@ public class BoxVpnService extends VpnService {
                     AppState.switching = false;
                     AppState.log("Не удалось выбрать сервер: " + t.getMessage());
                     AppState.changed();
+                }
+            }
+        });
+    }
+
+    /**
+     * The "Переключить" button in the notification: the next working server of the group, by ping.
+     * A server chosen by hand stays chosen by hand; otherwise it is kept like the speed check's choice,
+     * and the watchdog returns to the group if it stops answering.
+     */
+    private void switchNext() {
+        if (!running || exec == null || exec.isShutdown() || clash == null) return;
+        exec.execute(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (!running || AppState.vpn != AppState.ON || AppState.switching) return;
+                    String pt = pinnedTag();
+                    Server ps = pt == null ? null : byTag.get(pt);
+                    String group = ps == null ? activeGroup
+                            : ps.group == Server.LTE ? ConfigBuilder.GROUP_LTE : ConfigBuilder.GROUP_REGULAR;
+                    String cur = pt != null ? pt : autoTag != null ? autoTag : clash.now(group);
+                    final Map<String, Integer> d = clash.delays();
+                    List<String> members = clash.members(group);
+                    List<String> order = new ArrayList<>();
+                    for (String t : members) if (d.containsKey(t) && d.get(t) > 0) order.add(t);
+                    java.util.Collections.sort(order, new java.util.Comparator<String>() {
+                        @Override public int compare(String a, String b) { return d.get(a) - d.get(b); }
+                    });
+                    if (order.size() < 2) order = members; // no fresh pings: the subscription's order
+                    if (order.size() < 2) {
+                        AppState.banner("Других серверов нет", 2);
+                        return;
+                    }
+                    String next = order.get((order.indexOf(cur) + 1) % order.size());
+                    if (next.equals(cur)) return;
+                    Server s = byTag.get(next);
+                    if (ps != null && s != null) {
+                        prefs.pinned(s.name);
+                        applyPin(s.name);
+                    } else {
+                        clash.select(ConfigBuilder.SELECTOR, next);
+                        autoTag = next;
+                        deadCount = 0;
+                    }
+                    try {
+                        clash.closeAll(); // open connections move to the new server right away
+                    } catch (Exception ignored) {
+                    }
+                    refreshStatus();
+                    AppState.banner("Переключено на " + AppState.serverName, 1);
+                } catch (Throwable t) {
+                    AppState.log("Не удалось переключить сервер: " + t.getMessage());
                 }
             }
         });
@@ -1707,7 +1782,48 @@ public class BoxVpnService extends VpnService {
         return sb.toString();
     }
 
+
+    /* ---------- notification: server, time and speed; on Android 16 also a Live Update (Samsung Now Bar) ---------- */
+
+    private ScheduledExecutorService ticker;
+    private long tickDown = -1, tickUp, tickAt, downRate, upRate;
+    private String lastNotif = "";
+
+    /** Speed in the notification, every 2 seconds while connected. */
+    private void startTicker() {
+        tickDown = -1;
+        downRate = upRate = 0;
+        lastNotif = "";
+        ticker = Executors.newSingleThreadScheduledExecutor();
+        ticker.scheduleWithFixedDelay(new Runnable() {
+            @Override public void run() {
+                try {
+                    Clash c = clash;
+                    if (!running || c == null || AppState.vpn != AppState.ON) {
+                        tickDown = -1;
+                        return;
+                    }
+                    long[] t = c.totals();
+                    long now = System.currentTimeMillis();
+                    if (tickDown >= 0 && t[0] >= tickDown && now > tickAt) {
+                        downRate = (t[0] - tickDown) * 1000 / (now - tickAt);
+                        upRate = (t[1] - tickUp) * 1000 / (now - tickAt);
+                    }
+                    tickDown = t[0];
+                    tickUp = t[1];
+                    tickAt = now;
+                    updateNotification();
+                } catch (Throwable ignored) {
+                }
+            }
+        }, 2, 2, TimeUnit.SECONDS);
+    }
+
     private Notification notification(String text) {
+        return notification(getString(R.string.app_name), text, 0, false);
+    }
+
+    private Notification notification(String title, String text, long when, boolean paused) {
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm.getNotificationChannel(CHANNEL) == null) {
             NotificationChannel ch = new NotificationChannel(CHANNEL, "VPN", NotificationManager.IMPORTANCE_LOW);
@@ -1716,32 +1832,118 @@ public class BoxVpnService extends VpnService {
         }
         Intent open = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE);
-        Intent stop = new Intent(this, BoxVpnService.class).setAction(ACTION_STOP);
-        PendingIntent ps = PendingIntent.getService(this, 1, stop, PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Builder(this, CHANNEL)
+        Notification.Builder b = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat)
-                .setContentTitle(getString(R.string.app_name))
+                .setContentTitle(title)
                 .setContentText(text)
                 .setContentIntent(pi)
                 .setOngoing(true)
-                .addAction(new Notification.Action.Builder(null, "Отключить", ps).build())
-                .build();
+                .setOnlyAlertOnce(true)
+                .setVisibility(Notification.VISIBILITY_PUBLIC);
+        if (when > 0) {
+            b.setWhen(when).setShowWhen(true);
+            // pause: the system counts down to the resume by itself
+            if (paused) b.setUsesChronometer(true).setChronometerCountDown(true);
+        } else {
+            b.setShowWhen(false);
+        }
+        if (paused) {
+            b.addAction(action("Продолжить", ACTION_START, 2));
+        } else if (AppState.vpn == AppState.ON) {
+            b.addAction(action("Пауза", ACTION_PAUSE, 3));
+            b.addAction(action("Переключить", ACTION_SWITCH, 4));
+        }
+        b.addAction(action("Отключить", ACTION_STOP, 1));
+        promote(b);
+        return b.build();
+    }
+
+    private Notification.Action action(String label, String act, int code) {
+        Intent i = new Intent(this, BoxVpnService.class).setAction(act);
+        PendingIntent p = PendingIntent.getService(this, code, i, PendingIntent.FLAG_IMMUTABLE);
+        return new Notification.Action.Builder(null, label, p).build();
+    }
+
+    /**
+     * Asks Android 16 to show the notification as a Live Update: a chip in the status bar, on top of the
+     * lock screen and in Samsung's Now Bar. The app is built against an older SDK, so the call goes by name.
+     */
+    private static void promote(Notification.Builder b) {
+        if (Build.VERSION.SDK_INT < 36) return;
+        try {
+            Notification.Builder.class.getMethod("setRequestPromotedOngoing", boolean.class).invoke(b, true);
+        } catch (Throwable t) {
+            b.getExtras().putBoolean("android.requestPromotedOngoing", true);
+        }
     }
 
     private void updateNotification() {
-        String text;
+        String title = getString(R.string.app_name), text;
+        long when = 0;
         if (AppState.vpn == AppState.ON) {
-            text = AppState.serverName + (AppState.ping > 0 ? " · " + AppState.ping + " мс" : "");
+            String name = AppState.serverName.isEmpty() ? "Подключено" : AppState.serverName;
+            title = (AppState.pinned.isEmpty() ? "⚡ " : "") + name;
+            text = since(System.currentTimeMillis() - AppState.since);
+            if (tickDown >= 0) text += " · ↑ " + Stats.rate(upRate) + "  ↓ " + Stats.rate(downRate);
+            when = AppState.since;
         } else if (AppState.vpn == AppState.WAITING) {
-            text = "Ожидание сети";
+            text = AppState.wl == AppState.WL_NONET ? "Ожидание сети" : "Нет ответа, ожидание";
         } else {
             text = "Подключение…";
         }
-        if (text.equals(lastNotifText) || !running) return;
-        lastNotifText = text;
-        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        nm.notify(NOTIFY_ID, notification(text));
+        String key = title + "|" + text + "|" + AppState.vpn;
+        synchronized (this) {
+            // after stopVpn the notification is gone; posting it again would leave a stray one
+            if (key.equals(lastNotif) || !running) return;
+            lastNotif = key;
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            nm.notify(NOTIFY_ID, notification(title, text, when, false));
+        }
     }
 
-    private String lastNotifText = "";
+    /** "<1 мин", "12 мин", "1 ч 5 мин". */
+    private static String since(long ms) {
+        long m = Math.max(0, ms) / 60000;
+        if (m < 1) return "<1 мин";
+        if (m < 60) return m + " мин";
+        return m / 60 + " ч " + m % 60 + " мин";
+    }
+
+    /* ---------- pause from the notification: VPN off for 5 minutes, then back on by itself ---------- */
+
+    private final AlarmManager.OnAlarmListener resume = new AlarmManager.OnAlarmListener() {
+        @Override public void onAlarm() {
+            if (AppState.pausedUntil == 0) return;
+            AppState.pausedUntil = 0;
+            AppState.log("Пауза закончилась");
+            if (!running) {
+                startForeground(NOTIFY_ID, notification("Подключение…"));
+                startVpn();
+            }
+        }
+    };
+
+    private void pause() {
+        if (!running) {
+            if (AppState.pausedUntil == 0) stopSelf();
+            return;
+        }
+        stopVpn("Пауза на " + PAUSE_MS / 60000 + " минут", true);
+        AppState.pausedUntil = System.currentTimeMillis() + PAUSE_MS;
+        AppState.changed();
+        // the service stays in the foreground, so turning the VPN back on needs no start from the background
+        AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, android.os.SystemClock.elapsedRealtime() + PAUSE_MS,
+                "dash-resume", resume, null);
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        nm.notify(NOTIFY_ID, notification("Пауза", "VPN включится сам через " + PAUSE_MS / 60000 + " минут",
+                AppState.pausedUntil, true));
+    }
+
+    private void cancelPause() {
+        if (AppState.pausedUntil == 0) return;
+        AppState.pausedUntil = 0;
+        ((AlarmManager) getSystemService(Context.ALARM_SERVICE)).cancel(resume);
+        AppState.changed();
+    }
 }
