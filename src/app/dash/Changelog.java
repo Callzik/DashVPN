@@ -40,6 +40,9 @@ public final class Changelog {
                 "Если сервер отвечает на пинг, но не пропускает трафик, Dash уходит на другой",
                 "Новый экран настроек: разделы с иконками и поиск",
         });
+        ENTRIES.put(37, new String[]{
+                "Настройки → Остров и Now Bar: показывает, пускает ли телефон уведомление Dash в строку состояния, и открывает нужные настройки",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

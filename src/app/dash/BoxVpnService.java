@@ -54,7 +54,7 @@ public class BoxVpnService extends VpnService {
     public static final String ACTION_SWITCH = "app.dash.SWITCH";
     private static final long PAUSE_MS = 5 * 60 * 1000L;
     private static final String CHANNEL = "vpn";
-    private static final int NOTIFY_ID = 1;
+    static final int NOTIFY_ID = 1;
 
     private volatile boolean running;
     private volatile boolean stopping;
@@ -1909,6 +1909,7 @@ public class BoxVpnService extends VpnService {
         tickDown = -1;
         downRate = upRate = 0;
         lastNotif = "";
+        liveLogged = false;
         ticker = Executors.newSingleThreadScheduledExecutor();
         ticker.scheduleWithFixedDelay(new Runnable() {
             @Override public void run() {
@@ -1969,7 +1970,7 @@ public class BoxVpnService extends VpnService {
             b.addAction(action("Переключить", ACTION_SWITCH, 4));
         }
         b.addAction(action("Отключить", ACTION_STOP, 1));
-        promote(b);
+        LiveUpdate.request(b);
         return b.build();
     }
 
@@ -1977,19 +1978,6 @@ public class BoxVpnService extends VpnService {
         Intent i = new Intent(this, BoxVpnService.class).setAction(act);
         PendingIntent p = PendingIntent.getService(this, code, i, PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Action.Builder(null, label, p).build();
-    }
-
-    /**
-     * Asks Android 16 to show the notification as a Live Update: a chip in the status bar, on top of the
-     * lock screen and in Samsung's Now Bar. The app is built against an older SDK, so the call goes by name.
-     */
-    private static void promote(Notification.Builder b) {
-        if (Build.VERSION.SDK_INT < 36) return;
-        try {
-            Notification.Builder.class.getMethod("setRequestPromotedOngoing", boolean.class).invoke(b, true);
-        } catch (Throwable t) {
-            b.getExtras().putBoolean("android.requestPromotedOngoing", true);
-        }
     }
 
     private void updateNotification() {
@@ -2012,9 +2000,26 @@ public class BoxVpnService extends VpnService {
             if (key.equals(lastNotif) || !running) return;
             lastNotif = key;
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            nm.notify(NOTIFY_ID, notification(title, text, when, false));
+            Notification n = notification(title, text, when, false);
+            nm.notify(NOTIFY_ID, n);
+            if (AppState.vpn == AppState.ON && !liveLogged && LiveUpdate.supported()) {
+                liveLogged = true;
+                final Boolean ok = LiveUpdate.promotable(n);
+                // the system decides a moment after notify, so look a little later
+                try {
+                    ticker.schedule(new Runnable() {
+                        @Override public void run() {
+                            AppState.log("Живое уведомление: подходит " + (ok == null ? "?" : ok ? "да" : "нет")
+                                    + " · " + LiveUpdate.status(BoxVpnService.this, NOTIFY_ID));
+                        }
+                    }, 1, TimeUnit.SECONDS);
+                } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                }
+            }
         }
     }
+
+    private boolean liveLogged;
 
     /** "<1 мин", "12 мин", "1 ч 5 мин". */
     private static String since(long ms) {
