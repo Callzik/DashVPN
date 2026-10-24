@@ -24,6 +24,9 @@ func init() {
 	if u := os.Getenv("DASH_SPEED_URL"); u != "" {
 		SpeedURL = u
 	}
+	if u := os.Getenv("DASH_LOAD_URL"); u != "" {
+		LoadURL = u
+	}
 	if p := os.Getenv("DASH_TEST_MIXED"); p != "" {
 		testMixedPort, _ = strconv.Atoi(p)
 	}
