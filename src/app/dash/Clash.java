@@ -95,6 +95,31 @@ public final class Clash {
         return d > 0 ? d : -1;
     }
 
+    /** Last measured delay of every outbound in one call (tag → ms; failed and untested ones left out). */
+    public Map<String, Integer> delays() throws Exception {
+        JSONObject ps = new JSONObject(call("GET", "/proxies", null, 4000)).optJSONObject("proxies");
+        Map<String, Integer> m = new HashMap<>();
+        if (ps == null) return m;
+        java.util.Iterator<String> it = ps.keys();
+        while (it.hasNext()) {
+            String tag = it.next();
+            JSONObject p = ps.optJSONObject(tag);
+            JSONArray h = p == null ? null : p.optJSONArray("history");
+            if (h == null || h.length() == 0) continue;
+            int d = h.getJSONObject(h.length() - 1).optInt("delay", 0);
+            if (d > 0) m.put(tag, d);
+        }
+        return m;
+    }
+
+    /** Members of a selector or urltest group. */
+    public List<String> members(String group) throws Exception {
+        JSONArray all = new JSONObject(call("GET", "/proxies/" + enc(group), null, 4000)).optJSONArray("all");
+        List<String> out = new ArrayList<>();
+        if (all != null) for (int i = 0; i < all.length(); i++) out.add(all.getString(i));
+        return out;
+    }
+
     /** Delay of one outbound (e.g. "direct") to the given URL, -1 on failure. */
     public int proxyDelay(String tag, String url, int timeoutMs) throws Exception {
         String path = "/proxies/" + enc(tag) + "/delay?url=" + enc(url) + "&timeout=" + timeoutMs;

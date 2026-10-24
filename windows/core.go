@@ -62,6 +62,12 @@ type Core struct {
 	lastFasterCheck time.Time
 	switching       bool
 
+	// speed check: autoTag is the server it picked (selected directly, unlike a manual pin)
+	speedPort int
+	autoTag   string
+	speedBusy bool
+	lastSpeed time.Time
+
 	serverName, group  string
 	ping, alive, gsize int
 	pinned             string
@@ -557,6 +563,7 @@ func (c *Core) startCore(g int) error {
 		if pn := c.prefs.Get().Pinned; pn != "" && !c.applyPin(pn) {
 			c.prefs.Update(func(d *PrefsData) { d.Pinned = "" })
 		}
+		c.laterSpeedCheck(g)
 	}
 	c.refreshStatus()
 	return nil
@@ -597,8 +604,8 @@ var tunAddrs = [][2]string{
 // startSingBox writes the config with TUN address #idx and starts the core.
 // retry=true when the failure is an address conflict worth another address.
 func (c *Core) startSingBox(g int, servers []*Server, group string, idx int) (ok, retry bool, err error) {
-	port, secret := freePort(), randHex(16)
-	cfg, err := BuildSingBox(servers, BuildOptions{
+	port, speedPort, secret := freePort(), freePort(), randHex(16)
+	cfg, err := BuildSingBox(servers, BuildOptions{SpeedPort: speedPort,
 		RuDirect: c.prefs.Get().RuDirect, BlockedVPN: c.prefs.Get().BlockedVPN,
 		RuleDir: c.ruleDir, Secret: secret, ClashPort: port, InitialGroup: group,
 		TunName: "Dash", TunAddr4: tunAddrs[idx][0], TunAddr6: tunAddrs[idx][1], BypassProcs: append(bypassProcs(), c.prefs.Get().BypassApps...)})
@@ -615,7 +622,7 @@ func (c *Core) startSingBox(g int, servers []*Server, group string, idx int) (ok
 	}
 	clash := NewClash(port, secret)
 	c.mu.Lock()
-	c.sbProc, c.clash = p.cmd, clash
+	c.sbProc, c.clash, c.speedPort, c.autoTag = p.cmd, clash, speedPort, ""
 	c.mu.Unlock()
 	deadline := time.Now().Add(25 * time.Second)
 	for !clash.Alive() {
@@ -801,6 +808,7 @@ func (c *Core) ensureWorkingGroup(g int, group string, initial bool) string {
 	}
 	_ = cl.Select(Selector, use)
 	c.mu.Lock()
+	c.autoTag = ""
 	c.regularBlocked = blocked
 	c.activeGroup, c.group, c.alive = use, use, len(res)
 	c.mu.Unlock()
@@ -884,7 +892,7 @@ func (c *Core) pinnedTag() string {
 	sel := cl.Now(Selector)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, ok := c.byTag[sel]; ok {
+	if _, ok := c.byTag[sel]; ok && sel != c.autoTag {
 		return sel
 	}
 	return ""
@@ -904,6 +912,7 @@ func (c *Core) reevaluate(g int, cause string) {
 	blocked := c.regularBlocked
 	lastTry := c.lastRegularTry
 	prev := c.serverName
+	auto := c.autoTag
 	c.mu.Unlock()
 	if c.pinnedTag() != "" {
 		if waiting {
@@ -915,6 +924,13 @@ func (c *Core) reevaluate(g int, cause string) {
 	want := c.desiredGroup()
 	if want != active && blocked && cause == "periodic" && time.Since(lastTry) < 90*time.Second {
 		want = active // stay on white-list servers for now
+	}
+	if auto != "" {
+		if cause == "periodic" && want == active && !waiting {
+			c.refreshStatus() // the watchdog looks after the speed check's server
+			return
+		}
+		c.clearAuto(cl, active)
 	}
 	if want == GroupNameRegular && want != active {
 		c.mu.Lock()
@@ -964,6 +980,9 @@ func (c *Core) reevaluate(g int, cause string) {
 	if prev != "" && name != prev {
 		c.log.Add("Сервер сменился: " + prev + " → " + name)
 	}
+	if cause != "periodic" {
+		c.laterSpeedCheck(g)
+	}
 }
 
 func (c *Core) refreshStatus() {
@@ -985,7 +1004,11 @@ func (c *Core) refreshStatus() {
 		if picked.Group == GroupLTE {
 			group = GroupNameLTE
 		}
-		pinned = picked.Name
+		c.mu.Lock()
+		if sel != c.autoTag {
+			pinned = picked.Name
+		}
+		c.mu.Unlock()
 	} else {
 		group = sel
 		tag = cl.Now(sel)
@@ -1064,6 +1087,13 @@ func (c *Core) watch(g int) {
 		c.watchPinned(g, pt)
 		return
 	}
+	c.mu.Lock()
+	auto := c.autoTag
+	c.mu.Unlock()
+	if auto != "" {
+		c.watchAuto(g, cl, group, auto)
+		return
+	}
 	tag := cl.Now(group)
 	if tag == "" {
 		return
@@ -1114,6 +1144,38 @@ func (c *Core) watch(g int) {
 		c.mu.Unlock()
 		c.showBanner("Сервер перестал отвечать — переключено на "+n, 2)
 	}
+}
+
+// watchAuto: the speed check's server stopped answering, back to the group's choice.
+func (c *Core) watchAuto(g int, cl *Clash, group, tag string) {
+	if d := cl.Delay(tag, 5000); d > 0 {
+		c.mu.Lock()
+		c.deadCount, c.ping = 0, d
+		c.mu.Unlock()
+		return
+	}
+	c.mu.Lock()
+	c.deadCount++
+	dc := c.deadCount
+	c.mu.Unlock()
+	c.log.Add(fmt.Sprintf("Сервер %s не ответил (%d)", c.nameOf(tag), dc))
+	if dc < 2 {
+		return
+	}
+	c.mu.Lock()
+	c.deadCount = 0
+	c.mu.Unlock()
+	c.clearAuto(cl, group)
+	if res := cl.GroupCheck(group, 5000); len(res) == 0 && len(cl.TestGroup(group, 4000)) == 0 {
+		c.reevaluate(g, "dead")
+		return
+	}
+	cl.CloseAll()
+	c.refreshStatus()
+	c.mu.Lock()
+	n := c.serverName
+	c.mu.Unlock()
+	c.showBanner("Сервер перестал отвечать — переключено на "+n, 2)
 }
 
 func (c *Core) watchPinned(g int, tag string) {
@@ -1231,11 +1293,14 @@ func (c *Core) Pin(name string) {
 	go func() {
 		c.mu.Lock()
 		c.switching = true
+		c.autoTag = ""
 		c.mu.Unlock()
 		if name == "" {
 			c.log.Add("Возврат к автовыбору")
 			grp := c.desiredGroup()
-			if c.ensureWorkingGroup(g, grp, false) == "" {
+			if c.ensureWorkingGroup(g, grp, false) != "" {
+				c.laterSpeedCheck(g)
+			} else {
 				if cl := c.cl(); cl != nil {
 					_ = cl.Select(Selector, grp)
 				}
@@ -1292,6 +1357,11 @@ func (c *Core) PingCurrent() {
 	c.mu.Unlock()
 	go func() {
 		tag := c.pinnedTag()
+		if tag == "" {
+			c.mu.Lock()
+			tag = c.autoTag
+			c.mu.Unlock()
+		}
 		if tag == "" {
 			tag = cl.Now(group)
 		}

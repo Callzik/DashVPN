@@ -31,6 +31,9 @@ public final class Changelog {
         ENTRIES.put(34, new String[]{
                 "VPN для точки доступа: устройства, подключённые к телефону, могут ходить через VPN по прокси (Настройки → Раздача)",
         });
+        ENTRIES.put(35, new String[]{
+                "Автовыбор учитывает реальную скорость: после подключения и при смене сети Dash коротко замеряет скорость трёх серверов с лучшим пингом и переходит на заметно более быстрый",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

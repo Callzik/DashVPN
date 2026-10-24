@@ -19,10 +19,12 @@ var TestURL = "https://www.gstatic.com/generate_204"
 var testMixedPort = 0
 
 type BuildOptions struct {
-	RuDirect     bool
-	BlockedVPN   bool
-	RuleDir      string
-	Secret       string
+	RuDirect   bool
+	BlockedVPN bool
+	RuleDir    string
+	Secret     string
+	// SpeedPort > 0 adds a local proxy for the speed check: login = server tag, password = Secret
+	SpeedPort    int
 	ClashPort    int
 	InitialGroup string
 	TunName      string
@@ -106,6 +108,20 @@ func BuildSingBox(servers []*Server, opt BuildOptions) (string, error) {
 		obj{"action": "sniff"},
 		obj{"protocol": "dns", "action": "hijack-dns"},
 	}
+	var extraIn []any
+	if opt.SpeedPort > 0 {
+		var users []any
+		for _, s := range servers {
+			if s.Group == GroupExcluded {
+				continue
+			}
+			users = append(users, obj{"username": s.Tag, "password": opt.Secret})
+			rules = append(rules, obj{"inbound": arr("speed-in"), "auth_user": arr(s.Tag), "outbound": s.Tag})
+		}
+		rules = append(rules, obj{"inbound": arr("speed-in"), "action": "reject"})
+		extraIn = append(extraIn, obj{"type": "mixed", "tag": "speed-in", "listen": "127.0.0.1",
+			"listen_port": opt.SpeedPort, "users": users})
+	}
 	if len(opt.BypassProcs) > 0 {
 		procs := make([]any, len(opt.BypassProcs))
 		for i, p := range opt.BypassProcs {
@@ -146,7 +162,7 @@ func BuildSingBox(servers []*Server, opt BuildOptions) (string, error) {
 	root := obj{
 		"log":       obj{"level": "info", "timestamp": true},
 		"dns":       dns,
-		"inbounds":  arr(tun),
+		"inbounds":  append(arr(tun), extraIn...),
 		"outbounds": outbounds,
 		"route":     route,
 		"experimental": obj{"clash_api": obj{
