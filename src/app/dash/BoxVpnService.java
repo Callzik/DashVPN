@@ -409,6 +409,7 @@ public class BoxVpnService extends VpnService {
 
         String secret = randomHex(16);
         clash = new Clash(secret);
+        autoTag = null;
         ConfigBuilder.Options opt = new ConfigBuilder.Options();
         opt.ruDirect = prefs.ruDirect();
         opt.blockedViaVpn = prefs.blockedVpn();
@@ -469,6 +470,7 @@ public class BoxVpnService extends VpnService {
             if (!pn.isEmpty()) {
                 if (!applyPin(pn)) prefs.pinned("");
             }
+            laterSpeedCheck();
         }
         refreshStatus();
         AppState.changed();
@@ -510,6 +512,11 @@ public class BoxVpnService extends VpnService {
             return;
         }
         String group = activeGroup;
+        String auto = autoTag;
+        if (auto != null) {
+            watchAuto(group, auto);
+            return;
+        }
         String tag = clash.now(group);
         if (tag.isEmpty()) return;
         int d = clash.proxyDelay(tag, ConfigBuilder.TEST_URL, 5000);
@@ -588,10 +595,127 @@ public class BoxVpnService extends VpnService {
     private String pinnedTag() {
         try {
             String sel = clash == null ? "" : clash.now(ConfigBuilder.SELECTOR);
-            return byTag.containsKey(sel) ? sel : null;
+            return byTag.containsKey(sel) && !sel.equals(autoTag) ? sel : null;
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /* ---------- speed check: lowest ping is not always fastest ---------- */
+
+    /** The server the speed check picked; selected directly like a manual pin, but it is still automatic choice. */
+    private volatile String autoTag;
+    private volatile boolean speedBusy;
+    private long lastSpeed;
+    private static final long SPEED_EVERY_MS = 3 * 60 * 1000L;
+
+    /** Runs the speed check a few seconds from now, once the first pings have settled. */
+    private void laterSpeedCheck() {
+        if (!running || exec == null || exec.isShutdown()) return;
+        try {
+            exec.schedule(new Runnable() {
+                @Override public void run() {
+                    try {
+                        speedCheck();
+                    } catch (Throwable t) {
+                        AppState.log("Замер скорости: " + t.getMessage());
+                    }
+                }
+            }, 6, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+        }
+    }
+
+    /**
+     * Downloads a test file through the best few servers by ping, one after another, and moves to one that is
+     * clearly faster than the current (an overloaded server answers pings quickly but downloads slowly).
+     * Runs after connecting and after a network change. The downloads run on their own thread, so the
+     * watchdog and network changes are not held up.
+     */
+    private void speedCheck() throws Exception {
+        if (!running || clash == null || AppState.vpn != AppState.ON || AppState.switching || speedBusy
+                || autoTag != null || System.currentTimeMillis() - lastSpeed < SPEED_EVERY_MS) return;
+        if (pinnedTag() != null) return;
+        final Clash c = clash;
+        final String group = activeGroup;
+        final String cur = c.now(group);
+        final List<String> picks = Speed.picks(c.members(group), c.delays(), cur);
+        if (picks.size() < 2) return;
+        speedBusy = true;
+        lastSpeed = System.currentTimeMillis();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final Map<String, Double> speeds = new HashMap<>();
+                try {
+                    for (String t : picks) {
+                        if (!running || c != clash) return;
+                        double v = Speed.measure(ConfigBuilder.SPEED_PORT, t, c.secret());
+                        speeds.put(t, v);
+                        Server s = byTag.get(t);
+                        AppState.log("Скорость: " + (s != null ? s.name : t) + " — " + Speed.mbit(v));
+                    }
+                    final String best = Speed.faster(speeds, cur);
+                    if (best == null) return;
+                    exec.execute(new Runnable() {
+                        @Override public void run() {
+                            try {
+                                applySpeedPick(c, group, cur, best, speeds.get(best));
+                            } catch (Throwable t) {
+                                AppState.log("Замер скорости: " + t.getMessage());
+                            }
+                        }
+                    });
+                } catch (Throwable ignored) {
+                } finally {
+                    speedBusy = false;
+                }
+            }
+        }, "speed-check").start();
+    }
+
+    private void applySpeedPick(Clash c, String group, String cur, String best, double mbit) throws Exception {
+        if (!running || c != clash || AppState.vpn != AppState.ON || AppState.switching || autoTag != null
+                || !group.equals(activeGroup) || pinnedTag() != null || !cur.equals(c.now(group))) return;
+        c.select(ConfigBuilder.SELECTOR, best);
+        autoTag = best;
+        deadCount = 0;
+        refreshStatus();
+        Server s = byTag.get(best);
+        AppState.banner("Выбран более быстрый сервер: " + (s != null ? s.name : best) + " · " + Speed.mbit(mbit), 1);
+    }
+
+    /** Drops the speed check's choice and hands traffic back to the group. */
+    private void clearAuto(String group) throws Exception {
+        if (autoTag == null) return;
+        autoTag = null;
+        clash.select(ConfigBuilder.SELECTOR, group);
+    }
+
+    /** The speed check's server stopped answering: back to the group's choice. */
+    private void watchAuto(String group, String tag) throws Exception {
+        int d = clash.proxyDelay(tag, ConfigBuilder.TEST_URL, 5000);
+        if (d > 0) {
+            deadCount = 0;
+            AppState.ping = d;
+            AppState.changed();
+            return;
+        }
+        deadCount++;
+        Server s = byTag.get(tag);
+        AppState.log("Сервер " + (s != null ? s.name : tag) + " не ответил (" + deadCount + ")");
+        if (deadCount < 2) return;
+        deadCount = 0;
+        clearAuto(group);
+        if (clash.groupCheck(group, 5000).isEmpty() && clash.testGroup(group, 4000).isEmpty()) {
+            safeReevaluate("dead");
+            return;
+        }
+        try {
+            clash.closeAll();
+        } catch (Exception ignored) {
+        }
+        refreshStatus();
+        AppState.banner("Сервер перестал отвечать — переключено на " + AppState.serverName, 2);
     }
 
     private void watchPinned(String tag) throws Exception {
@@ -641,10 +765,13 @@ public class BoxVpnService extends VpnService {
                 try {
                     if (AppState.vpn == AppState.OFF || AppState.vpn == AppState.CONNECTING) return;
                     AppState.switching = true;
+                    autoTag = null;
                     AppState.changed();
                     if (name.isEmpty()) {
                         AppState.log("Возврат к автовыбору");
-                        if (ensureWorkingGroup(desiredGroup(), false) == null) {
+                        if (ensureWorkingGroup(desiredGroup(), false) != null) {
+                            laterSpeedCheck();
+                        } else {
                             clash.select(ConfigBuilder.SELECTOR, desiredGroup());
                             if (!setVpn(AppState.WAITING)) return;
                             AppState.phase = "Ни один сервер не отвечает. Повторная попытка через несколько секунд";
@@ -674,6 +801,7 @@ public class BoxVpnService extends VpnService {
             @Override public void run() {
                 try {
                     String tag = pinnedTag();
+                    if (tag == null) tag = autoTag;
                     if (tag == null) tag = c.now(activeGroup);
                     int d = tag.isEmpty() ? -1 : c.proxyDelay(tag, ConfigBuilder.TEST_URL, 5000);
                     AppState.ping = d > 0 ? d : -1;
@@ -837,6 +965,7 @@ public class BoxVpnService extends VpnService {
         AppState.regularBlocked = ConfigBuilder.GROUP_LTE.equals(use) && ConfigBuilder.GROUP_REGULAR.equals(group);
         if (AppState.regularBlocked) AppState.log("Обычные серверы не отвечают, хотя белых списков нет — используются серверы для БС");
         clash.select(ConfigBuilder.SELECTOR, use);
+        autoTag = null;
         activeGroup = use;
         AppState.group = use;
         AppState.alive = res.size();
@@ -934,6 +1063,14 @@ public class BoxVpnService extends VpnService {
         if (!want.equals(activeGroup) && !retryRegular && ConfigBuilder.GROUP_LTE.equals(activeGroup)) {
             want = activeGroup; // keep the white-list server for now
         }
+        if (autoTag != null) {
+            if ("periodic".equals(cause) && want.equals(activeGroup) && !wasWaiting) {
+                AppState.switching = false;
+                refreshStatus(); // the watchdog looks after the speed check's server
+                return;
+            }
+            clearAuto(activeGroup);
+        }
         if (ConfigBuilder.GROUP_REGULAR.equals(want) && !want.equals(activeGroup)) lastRegularTry = System.currentTimeMillis();
         if (!want.equals(activeGroup) || wasWaiting) {
             used = ensureWorkingGroup(want, false);
@@ -978,6 +1115,7 @@ public class BoxVpnService extends VpnService {
             }
         }
         AppState.changed();
+        if (!"periodic".equals(cause)) laterSpeedCheck();
     }
 
     private void refreshStatus() throws Exception {
@@ -989,7 +1127,7 @@ public class BoxVpnService extends VpnService {
         if (picked != null) {
             tag = group;
             group = picked.group == Server.LTE ? ConfigBuilder.GROUP_LTE : ConfigBuilder.GROUP_REGULAR;
-            AppState.pinned = picked.name;
+            AppState.pinned = tag.equals(autoTag) ? "" : picked.name;
         } else {
             tag = clash.now(group);
             AppState.pinned = "";

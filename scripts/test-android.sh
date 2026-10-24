@@ -1,10 +1,11 @@
 #!/bin/bash
-# Runs the Android parser tests on a plain JVM (no SDK needed).
+# Runs the Android parser and speed check tests on a plain JVM (no SDK needed).
 set -euo pipefail
 export JAVA_TOOL_OPTIONS=
 cd "$(dirname "$0")/.."
 B=build/test
 rm -rf $B && mkdir -p $B
 javac -nowarn -encoding UTF-8 --release 8 -Xlint:-options -d $B \
-  src/app/dash/{SubParser,Server,Json,XrayJson}.java test/app/dash/SubParserTest.java
+  src/app/dash/{SubParser,Server,Json,XrayJson,Speed}.java test/app/dash/{SubParserTest,SpeedTest}.java
 java -cp $B app.dash.SubParserTest testdata/sub-cases.json
+java -cp $B app.dash.SpeedTest

@@ -12,6 +12,8 @@ public final class ConfigBuilder {
     public static final int CLASH_PORT = 19190;
     /** Local proxy only Dash uses (password = Clash secret) to see the VPN exit IP. */
     public static final int PROBE_PORT = 19191;
+    /** Local proxy for the speed check: login = server tag, password = Clash secret. */
+    public static final int SPEED_PORT = 19192;
     public static final String TEST_URL = "https://www.gstatic.com/generate_204";
 
     public static final class Options {
@@ -25,6 +27,8 @@ public final class ConfigBuilder {
         public int sharePort = 0;
         public String shareUser = "";
         public String sharePass = "";
+        /** Adds the speed check proxy (SPEED_PORT). */
+        public boolean speedTest = true;
     }
 
     private ConfigBuilder() {}
@@ -92,6 +96,13 @@ public final class ConfigBuilder {
         rules.add(Json.obj("action", "sniff"));
         rules.add(Json.obj("protocol", "dns", "action", "hijack-dns"));
         rules.add(Json.obj("inbound", Json.arr("probe-in"), "outbound", SELECTOR));
+        if (opt.speedTest) {
+            for (Server s : servers) {
+                if (s.group == Server.EXCLUDED) continue;
+                rules.add(Json.obj("inbound", Json.arr("speed-in"), "auth_user", Json.arr(s.tag), "outbound", s.tag));
+            }
+            rules.add(Json.obj("inbound", Json.arr("speed-in"), "action", "reject"));
+        }
         rules.add(Json.obj("ip_is_private", true, "outbound", "direct"));
         rules.add(Json.obj("rule_set", Json.arr("ru-inside"), "outbound", "direct"));
         if (opt.blockedViaVpn) rules.add(Json.obj("rule_set", Json.arr("ru-blocked", "ru-blocked-ip"), "outbound", SELECTOR));
@@ -115,7 +126,7 @@ public final class ConfigBuilder {
         Map<String, Object> root = Json.obj(
                 "log", Json.obj("level", opt.logLevel, "timestamp", true),
                 "dns", dns,
-                "inbounds", inbounds(tun, opt),
+                "inbounds", inbounds(tun, servers, opt),
                 "outbounds", outbounds,
                 "route", route,
                 "experimental", Json.obj("clash_api", Json.obj(
@@ -124,10 +135,17 @@ public final class ConfigBuilder {
         return Json.write(root);
     }
 
-    private static List<Object> inbounds(Map<String, Object> tun, Options opt) {
+    private static List<Object> inbounds(Map<String, Object> tun, List<Server> servers, Options opt) {
         List<Object> in = Json.arr(tun, Json.obj("type", "mixed", "tag", "probe-in",
                 "listen", "127.0.0.1", "listen_port", PROBE_PORT,
                 "users", Json.arr(Json.obj("username", "dash", "password", opt.secret))));
+        if (opt.speedTest) {
+            List<Object> users = new ArrayList<>();
+            for (Server s : servers) {
+                if (s.group != Server.EXCLUDED) users.add(Json.obj("username", s.tag, "password", opt.secret));
+            }
+            in.add(Json.obj("type", "mixed", "tag", "speed-in", "listen", "127.0.0.1", "listen_port", SPEED_PORT, "users", users));
+        }
         if (!opt.shareUser.isEmpty() && opt.sharePort > 0) {
             // SOCKS5 + HTTP on every interface (the hotspot address is not known in advance);
             // a login is mandatory, so strangers on the same Wi-Fi cannot use it
