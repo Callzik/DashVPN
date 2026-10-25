@@ -31,6 +31,7 @@ type PrefsData struct {
 	TunAddr    int               `json:"tun_addr"`
 	AutoStart  bool              `json:"connect_on_start"`
 	BypassApps []string          `json:"bypass_apps"`
+	SeenVer    string            `json:"seen_version"` // last version whose what's new was shown
 }
 
 func LoadPrefs(dir string) *Prefs {
@@ -134,7 +135,9 @@ func (p *Prefs) SetCache(u, body string) {
 
 func (p *Prefs) MarkUpdated() { p.Update(func(d *PrefsData) { d.SubUpdated = time.Now().Unix() }) }
 
-func isHTTP(u string) bool { return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") }
+func isHTTP(u string) bool {
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
 
 // SubLabel: the panel's profile-title, else the host, else the key type.
 func (p *Prefs) SubLabel(u string) string {

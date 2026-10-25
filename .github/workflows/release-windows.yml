@@ -1,0 +1,76 @@
+# Builds the Windows zip and publishes it, all in Actions (Actions -> release-windows -> Run workflow).
+# Needs the DASH_KS_PASS secret: it opens keystore/update-sign.key.enc to sign version.json.
+# Creates the release windows-v<ver> from windows/app.go's Version and writes url + sha256 into version.json on main.
+name: release-windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: release
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - name: Load pinned versions
+        run: grep -E '^[A-Z0-9_]+=' versions.env >> "$GITHUB_ENV"
+      - name: Version
+        run: |
+          set -euo pipefail
+          V=$(sed -n 's/^const Version = "\(.*\)"/\1/p' windows/app.go)
+          [ -n "$V" ] || { echo "::error::no Version in windows/app.go"; exit 1; }
+          if gh release view "windows-v$V" >/dev/null 2>&1; then
+            echo "::error::release windows-v$V already exists: bump Version in windows/app.go"
+            exit 1
+          fi
+          grep -q 'updatePubKey = "[A-Za-z0-9+/=]\{44\}"' windows/updatekey.go || { echo "::error::no update key in windows/updatekey.go"; exit 1; }
+          echo "VER=$V" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: windows/go.sum
+      - name: Tests
+        working-directory: windows
+        run: go test ./...
+      - name: rsrc
+        run: go install "github.com/akavel/rsrc@$RSRC_VERSION"
+      - name: Build
+        run: |
+          set -euo pipefail
+          scripts/fetch-cores.sh windows
+          scripts/package-windows.sh
+          mkdir -p dist
+          mv "out/Dash-Windows-$VER.zip" dist/
+      - name: Publish release and update version.json on main
+        env:
+          DASH_KS_PASS: ${{ secrets.DASH_KS_PASS }}
+        run: |
+          set -euo pipefail
+          [ -n "$DASH_KS_PASS" ] || { echo "::error::secret DASH_KS_PASS is not set: Windows clients would ignore an unsigned update"; exit 1; }
+          f=dist/Dash-Windows-$VER.zip
+          sha=$(sha256sum "$f" | cut -d' ' -f1)
+          scripts/release-notes.sh windows "$VER" "Dash-Windows-$VER.zip" "$sha" > "$RUNNER_TEMP/notes.md"
+          gh release create "windows-v$VER" "$f" --target main --title "Dash Windows $VER" --notes-file "$RUNNER_TEMP/notes.md"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/windows-v$VER/Dash-Windows-$VER.zip"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin main
+          git checkout -q -B main origin/main
+          jq --arg v "$VER" --arg u "$url" --arg s "$sha" \
+            '.windows = (.windows + {version: $v, url: $u, sha256: $s})' version.json > /tmp/version.json
+          mv /tmp/version.json version.json
+          DASH_KS_PASS="$DASH_KS_PASS" scripts/sign-version.sh .
+          [ -f version.json.sig ] && git add version.json.sig
+          git commit -qam "Release: Windows $VER"
+          git push origin HEAD:main

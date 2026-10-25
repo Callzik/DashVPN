@@ -49,7 +49,15 @@ func (a *API) handler() http.Handler {
 		return m
 	}
 	api("/api/state", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"s": a.core.View(), "update": a.upd.View()})
+		var news []string
+		if seen := a.prefs.Get().SeenVer; seen != Version {
+			news = whatsNew(seen)
+		}
+		writeJSON(w, map[string]any{"s": a.core.View(), "update": a.upd.View(), "news": news})
+	})
+	api("/api/news/seen", func(w http.ResponseWriter, r *http.Request) {
+		a.prefs.Update(func(d *PrefsData) { d.SeenVer = Version })
+		writeJSON(w, true)
 	})
 	api("/api/update/install", func(w http.ResponseWriter, r *http.Request) { a.upd.Install(); writeJSON(w, true) })
 	api("/api/update/check", func(w http.ResponseWriter, r *http.Request) { a.upd.Check(); writeJSON(w, a.upd.View()) })

@@ -69,7 +69,8 @@ jobs:
             if gh release view "$tag" >/dev/null 2>&1; then
               gh release upload "$tag" "$f" --clobber
             else
-              gh release create "$tag" "$f" --target main --title "Dash $title $ver" --notes "SHA-256 \`$name\`: \`$sha\`"
+              scripts/release-notes.sh "$plat" "$ver" "$name" "$sha" > /tmp/notes.md
+              gh release create "$tag" "$f" --target main --title "Dash $title $ver" --notes-file /tmp/notes.md
             fi
             url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$name"
             jq --arg p "$plat" --arg u "$url" --arg s "$sha" --argjson src "$(jq ".$plat" version.json)" \

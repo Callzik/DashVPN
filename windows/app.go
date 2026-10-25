@@ -59,6 +59,9 @@ func NewApp(binDir string, connect bool) (*App, error) {
 	}
 	a.Addr = addr
 	a.Log.Add("Dash " + Version + " для Windows")
+	if d := a.Prefs.Get(); d.SeenVer == "" && len(d.Subs) == 0 {
+		a.Prefs.Update(func(d *PrefsData) { d.SeenVer = Version }) // fresh install: nothing is new
+	}
 	if d := a.Prefs.Get(); (d.AutoStart || connect) && len(d.Subs) > 0 {
 		a.Core.Connect()
 	}
