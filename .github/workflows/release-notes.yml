@@ -1,0 +1,52 @@
+# Rewrites the description of every published release from the what's-new lists
+# (src/app/dash/Changelog.java, windows/changelog.go), keeping its SHA-256 line.
+# Runs by itself when either list changes on main; also Actions -> release-notes -> Run workflow.
+name: release-notes
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/app/dash/Changelog.java', 'windows/changelog.go', 'scripts/release-notes.sh']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  notes:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Update release descriptions
+        run: |
+          set -euo pipefail
+          gh release list --limit 200 --json tagName --jq '.[].tagName' | while read -r tag; do
+            case "$tag" in
+              android-v*) plat=android; ver=${tag#android-v} ;;
+              windows-v*) plat=windows; ver=${tag#windows-v} ;;
+              *) continue ;;
+            esac
+            body=$(gh release view "$tag" --json body --jq .body)
+            sha=$(printf '%s\n' "$body" | grep -m1 '^SHA-256' || true)
+            name=$(printf '%s' "$sha" | sed -n 's/^SHA-256 `\([^`]*\)`: `\([0-9a-f]*\)`.*/\1/p')
+            hash=$(printf '%s' "$sha" | sed -n 's/^SHA-256 `\([^`]*\)`: `\([0-9a-f]*\)`.*/\2/p')
+            if [ -n "$name" ] && [ -n "$hash" ]; then
+              new=$(scripts/release-notes.sh "$plat" "$ver" "$name" "$hash")
+            elif [ -z "$body" ]; then
+              new=$(scripts/release-notes.sh "$plat" "$ver")
+            else
+              continue # a description written by hand: leave it
+            fi
+            if [ -n "$new" ] && [ "$new" != "$body" ]; then
+              printf '%s\n' "$new" > /tmp/notes.md
+              gh release edit "$tag" --notes-file /tmp/notes.md
+              echo "updated $tag"
+            fi
+          done

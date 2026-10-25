@@ -79,8 +79,8 @@ jobs:
           set -euo pipefail
           f=dist/Dash-$VER.apk
           sha=$(sha256sum "$f" | cut -d' ' -f1)
-          gh release create "android-v$VER" "$f" --target main --title "Dash Android $VER" \
-            --notes "SHA-256 \`Dash-$VER.apk\`: \`$sha\`"
+          scripts/release-notes.sh android "$VER" "Dash-$VER.apk" "$sha" > "$RUNNER_TEMP/notes.md"
+          gh release create "android-v$VER" "$f" --target main --title "Dash Android $VER" --notes-file "$RUNNER_TEMP/notes.md"
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/android-v$VER/Dash-$VER.apk"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

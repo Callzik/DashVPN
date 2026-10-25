@@ -15,7 +15,7 @@ VPN-клиент для Android и Windows на ядрах sing-box и Xray. В�
 - **Белые списки.** Две группы серверов: обычные и «LTE». Если оператор включил белые списки, Dash это определит и переключится сам.
 - **Подписки.** Ссылки `vless`, `vmess`, `trojan`, `ss`, `hy2` и JSON-конфиги Xray / sing-box. Подписка обновляется автоматически.
 - **Android.** Плитка в шторке, виджет на рабочий стол, исключения для приложений.
-- **Windows.** Автообновление принимает только версии с подписью ed25519.
+- **Windows.** Значок в трее, автозапуск вместе с Windows, исключения для программ. Автообновление принимает только версии с подписью ed25519.
 
 ## Установка
 
@@ -53,6 +53,14 @@ cd windows && go test ./...
 ```
 
 Оба прогоняют [`testdata/sub-cases.json`](testdata/sub-cases.json), чтобы парсеры подписок на Android и Windows не расходились.
+
+**Выпуск**
+
+1. Поднять версию: `build.sh` и `AndroidManifest.xml` (Android) или `Version` в `windows/app.go` (Windows).
+2. Дописать, что нового: [`Changelog.java`](src/app/dash/Changelog.java) (по versionCode) или [`windows/changelog.go`](windows/changelog.go). Эти же строки приложение показывает после обновления, и они же становятся описанием релиза.
+3. После слияния в main: Actions → `release-android` или `release-windows` → Run workflow. Workflow собирает сборку, публикует релиз с описанием и SHA-256 и обновляет подписанный `version.json`.
+
+Описания уже выпущенных релизов обновляет `release-notes` сам, когда меняются списки изменений.
 
 ---
 

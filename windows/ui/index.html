@@ -99,6 +99,29 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 .menu{position:fixed;background:var(--surface2);border:1px solid var(--line2);border-radius:12px;padding:4px;display:none;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .menu button{display:block;width:100%;text-align:left;padding:8px 14px;border-radius:8px;font-size:14px}
 .menu button:hover{background:var(--line)}
+/* settings menu */
+.mgroup{background:var(--surface);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.hero-card{background:linear-gradient(135deg,var(--accent-tint),var(--surface));border-color:var(--line2)}
+.mrow{position:relative;display:flex;align-items:center;gap:14px;padding:12px 12px 12px 14px;min-height:64px;cursor:pointer}
+.mrow:hover{background:rgba(255,255,255,.03)}
+.mrow+.mrow::before{content:"";position:absolute;left:70px;right:0;top:0;height:1px;background:var(--line)}
+.mrow.big{padding:18px 12px 18px 14px;min-height:76px}
+.mic{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;flex:none}
+.mic svg{width:22px;height:22px}
+.mrow.big .mic{width:46px;height:46px;border-radius:15px}.mrow.big .mic svg{width:26px;height:26px}
+.mrow .b{font-size:16px}.mrow.big .b{font-size:18px}
+.mrow .sub{color:var(--muted);font-size:13px;margin-top:2px}.mrow .sub.news{color:var(--accent)}
+.glabel{color:var(--muted);font-size:13px;font-weight:600;margin:22px 6px 8px}
+.search{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:0 4px 0 14px;height:50px;margin-top:12px;cursor:text}
+.search:focus-within{border-color:var(--line2)}
+.search>svg{width:20px;height:20px;flex:none}
+.search input{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--fg);font-size:15px;-webkit-user-select:text;user-select:text}
+.search input::placeholder{color:#6F6B82}
+.page{display:none}.page.on{display:block}
+.modal{position:fixed;inset:0;background:rgba(5,5,8,.7);display:none;align-items:center;justify-content:center;padding:24px;z-index:6}
+.modal.on{display:flex}
+.modal .card{max-width:380px;width:100%}
+.modal li{margin:10px 0 0 18px;font-size:14px}
 </style>
 </head>
 <body>
@@ -139,55 +162,70 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
   <div class="scroll" id="srvlist"></div>
 </section>
 
-<!-- settings -->
+<!-- settings: menu -->
 <section class="view" id="v-settings">
   <div class="top"><button class="back" onclick="show('main')">←</button><h1>Настройки</h1><span class="m" id="ver2"></span></div>
   <div class="scroll">
-    <div class="section row"><span class="grow">Подписки</span><button class="link" onclick="refreshSubs()" title="Скачать подписки заново">Обновить</button></div>
-    <div class="card">
-      <div id="sublist"></div>
-      <input class="field" id="subinput" placeholder="Ещё одна ссылка: https://… или vless://…" style="margin-top:12px" onkeydown="if(event.key==='Enter')addSub('subinput')">
-      <div class="row" style="margin-top:10px">
-        <button class="secondary grow" onclick="pasteInto('subinput')">Вставить</button>
-        <button class="secondary grow" style="color:var(--accent)" onclick="addSub('subinput')">Добавить</button>
-      </div>
-      <div class="m" id="subinfo" style="margin-top:12px"></div>
-    </div>
-
-    <div class="section">Запуск</div>
-    <div class="card">
-      <div class="row"><div class="grow"><div class="b">Запускать вместе с Windows</div><div class="m">Dash стартует в трее при входе в систему</div></div><div class="switch" id="sw-ar" onclick="setAutorun(this)"></div></div>
-      <div class="sep"></div>
-      <div class="row"><div class="grow"><div class="b">Подключаться при запуске</div><div class="m">VPN включается сам, без нажатия кнопки</div></div><div class="switch" id="sw-as" onclick="setAuto(this)"></div></div>
-    </div>
-
-    <div class="section">Маршрутизация</div>
-    <div class="card">
-      <div class="row"><div class="grow"><div class="b">Российские сайты напрямую</div><div class="m">Без VPN: банки, Госуслуги, маркетплейсы</div></div><div class="switch" id="sw-ru" onclick="setOpt('ruDirect',this)"></div></div>
-      <div class="sep"></div>
-      <div class="row"><div class="grow"><div class="b">Заблокированное в РФ — через VPN</div><div class="m">Даже если сайт в зоне .ru</div></div><div class="switch" id="sw-bl" onclick="setOpt('blockedVpn',this)"></div></div>
-      <div class="sep"></div>
-      <div class="row clickable" onclick="show('apps')"><div class="grow"><div class="b">Приложения без VPN</div><div class="m ell" id="appsum">Весь трафик идёт через VPN</div></div><span class="m" style="font-size:20px">›</span></div>
-    </div>
-
-    <div class="section">Обновления</div>
-    <div class="card">
-      <div class="row"><div class="grow"><div class="b" id="ver3">Dash</div><div class="m" id="updstate">Обновления проверяются сами</div></div>
-        <button class="secondary" id="updbtn2" onclick="updAction()">Проверить</button></div>
-    </div>
-
-    <div class="section">Журнал</div>
-    <div class="card">
-      <div class="b">События подключения</div><div class="m">Пригодится, если что-то не работает</div>
-      <div class="row" style="margin-top:12px">
-        <button class="secondary grow" id="logbtn" onclick="toggleLog()">Показать</button>
-        <button class="secondary grow" onclick="copyLog()">Скопировать</button></div>
-      <pre class="log" id="log" style="display:none;margin-top:12px;max-height:300px;overflow:auto"></pre>
-    </div>
-
-    <div class="section">О приложении</div>
-    <div class="card"><div class="m">Dash для Windows · ядра sing-box и Xray-core · создано с помощью Claude.<br>Весь трафик ПК идёт через VPN-адаптер, российские сайты — напрямую. Упавшее ядро перезапускается само, после сна соединение проверяется заново.</div>
+    <div class="mgroup hero-card" id="herobox"></div>
+    <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="#9C98B0" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg>
+      <input id="setsearch" placeholder="Поиск настроек" oninput="query=this.value;renderMenu()" onkeydown="if(event.key==='Escape'&&this.value){event.stopPropagation();clearSearch()}">
+      <button class="x" id="setclear" style="display:none" title="Очистить" onclick="clearSearch()">✕</button></label>
+    <div id="menubody"></div>
+    <div class="card" style="margin-top:22px"><div class="m">Dash для Windows · ядра sing-box и Xray-core · создано с помощью Claude.<br>Весь трафик ПК идёт через VPN-адаптер, российские сайты — напрямую. Упавшее ядро перезапускается само, после сна соединение проверяется заново.</div>
       <button class="secondary" style="width:100%;margin-top:12px;color:var(--bad)" onclick="api('/api/quit')">Отключить VPN и выйти</button></div>
+  </div>
+</section>
+
+<!-- settings: one page -->
+<section class="view" id="v-spage">
+  <div class="top"><button class="back" onclick="show('settings')">←</button><h1 id="ptitle"></h1></div>
+  <div class="scroll">
+    <div class="page" data-page="subs">
+      <div class="card">
+        <div id="sublist"></div>
+        <input class="field" id="subinput" placeholder="Ещё одна ссылка: https://… или vless://…" style="margin-top:12px" onkeydown="if(event.key==='Enter')addSub('subinput')">
+        <div class="row" style="margin-top:10px">
+          <button class="secondary grow" onclick="pasteInto('subinput')">Вставить</button>
+          <button class="secondary grow" style="color:var(--accent)" onclick="addSub('subinput')">Добавить</button>
+        </div>
+        <div class="m" id="subinfo" style="margin-top:12px"></div>
+      </div>
+      <button class="secondary" style="width:100%;margin-top:12px" onclick="refreshSubs()">Обновить подписки</button>
+    </div>
+
+    <div class="page" data-page="start">
+      <div class="card">
+        <div class="row"><div class="grow"><div class="b">Запускать вместе с Windows</div><div class="m">Dash стартует в трее при входе в систему</div></div><div class="switch" id="sw-ar" onclick="setAutorun(this)"></div></div>
+        <div class="sep"></div>
+        <div class="row"><div class="grow"><div class="b">Подключаться при запуске</div><div class="m">VPN включается сам, без нажатия кнопки</div></div><div class="switch" id="sw-as" onclick="setAuto(this)"></div></div>
+      </div>
+    </div>
+
+    <div class="page" data-page="route">
+      <div class="card">
+        <div class="row"><div class="grow"><div class="b">Российские сайты напрямую</div><div class="m">Без VPN: банки, Госуслуги, маркетплейсы</div></div><div class="switch" id="sw-ru" onclick="setOpt('ruDirect',this)"></div></div>
+        <div class="sep"></div>
+        <div class="row"><div class="grow"><div class="b">Заблокированное в РФ — через VPN</div><div class="m">Даже если сайт в зоне .ru</div></div><div class="switch" id="sw-bl" onclick="setOpt('blockedVpn',this)"></div></div>
+      </div>
+    </div>
+
+    <div class="page" data-page="update">
+      <div class="card">
+        <div class="row"><div class="grow"><div class="b" id="ver3">Dash</div><div class="m" id="updstate">Обновления проверяются сами</div></div>
+          <button class="secondary" id="updbtn2" onclick="updAction()">Проверить</button></div>
+      </div>
+      <div class="m" style="margin:12px 4px 0">Dash ставит только обновления с цифровой подписью разработчика.</div>
+    </div>
+
+    <div class="page" data-page="log">
+      <div class="card">
+        <div class="b">События подключения</div><div class="m">Пригодится, если что-то не работает</div>
+        <div class="row" style="margin-top:12px">
+          <button class="secondary grow" id="logbtn" onclick="toggleLog()">Показать</button>
+          <button class="secondary grow" onclick="copyLog()">Скопировать</button></div>
+        <pre class="log" id="log" style="display:none;margin-top:12px;max-height:420px;overflow:auto"></pre>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -215,6 +253,8 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
   <button class="primary" style="margin-top:16px" onclick="addSub('onbinput',true)">Продолжить</button>
 </section>
 
+<div class="modal" id="news"><div class="card"><div class="b" style="font-size:18px" id="newstitle">Что нового</div><ul id="newslist"></ul>
+  <button class="primary" style="margin-top:18px;height:46px" onclick="newsSeen()">Понятно</button></div></div>
 <div class="menu" id="menu"></div>
 <div class="toast" id="toast"></div>
 
@@ -232,7 +272,7 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 function show(v){
   view=v;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));
   if(v==='servers'){offChanged=false;loadServers();if(S.state==='on')api('/api/ping-all')}
-  if(v==='settings')loadSettings();
+  if(v==='settings'||v==='spage')loadSettings();
   if(v==='apps')loadApps();
 }
 function dur(sec){sec=Math.max(0,sec);const p=n=>String(n).padStart(2,'0');return p(Math.floor(sec/3600))+':'+p(Math.floor(sec/60)%60)+':'+p(sec%60)}
@@ -241,6 +281,7 @@ function pc(p){return p<300?'good':p<400?'mid':'bad'}
 async function poll(){
   let R;try{R=await api('/api/state')}catch(e){return}
   S=R.s;const U=R.update||{};
+  showNews(R.news);
   const ub=$('upd');ub.style.display=U.version?'':'none';
   if(U.version){$('updtext').textContent=U.progress===101?'Установка '+U.version+'…':U.progress>=0?'Загрузка '+U.version+' · '+U.progress+'%':U.error||('Доступна версия '+U.version);
     $('updbtn').style.display=U.progress>=0?'none':'';$('updbtn').textContent=U.error?'Ещё раз':'Обновить'}
@@ -269,6 +310,7 @@ async function poll(){
   $('t-mode').textContent=manual?'Вручную':'Авто';
   orbitState(st);
   if(view==='servers')loadServers();
+  if(view==='settings'&&menuKey()!==lastMenu)renderMenu();
 }
 
 async function loadServers(){
@@ -318,10 +360,69 @@ async function loadSettings(){
   $('subinfo').style.whiteSpace='pre-line';
   $('sw-ru').classList.toggle('on',!!r.ruDirect);$('sw-bl').classList.toggle('on',!!r.blockedVpn);
   $('sw-as').classList.toggle('on',!!r.autoStart);$('sw-ar').classList.toggle('on',!!r.autorun);
-  const ap=await api('/api/apps');const bl=ap.bypass||[];
-  $('appsum').textContent=bl.length?bl.map(n=>n.replace(/\.exe$/i,'')).join(', '):'Весь трафик идёт через VPN';
+  const ap=await api('/api/apps');
+  SET={subs:(r.subs||[]).length,summary:r.summary||'',updated:r.updated,ruDirect:!!r.ruDirect,autoStart:!!r.autoStart,autorun:!!r.autorun,apps:(ap.bypass||[]).length};
+  renderMenu();
   const lg=await api('/api/log');$('log').textContent=lg.text||'Пока пусто';
 }
+
+/* settings menu: big subscriptions card, search, grouped rows; each row opens its own page */
+const IC={
+  subs:'<rect x="4" y="10" width="16" height="10" rx="3"/><path d="M6 6.5h12M8.5 3.5h7"/>',
+  start:'<path d="M12 3.5v7.5"/><path d="M17.3 6.8a7.5 7.5 0 1 1-10.6 0"/>',
+  route:'<path d="M12 21v-8L6 6M12 13l6-7"/><circle cx="6" cy="5" r="2"/><circle cx="18" cy="5" r="2"/>',
+  apps:'<rect x="4" y="4" width="6.5" height="6.5" rx="2.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2.5"/>',
+  update:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5V16M8.5 12.5 12 16l3.5-3.5"/>',
+  log:'<path d="M2.5 12h4l3-6.5 5 13 3-6.5h4"/>'};
+const PAGES={
+  subs:{t:'Подписки',c:'#8B7CFF',k:'ссылка подписка ключ vless добавить удалить вставить обновить серверы'},
+  start:{t:'Запуск',c:'#F2B544',k:'автозапуск windows вход трей подключаться при запуске автоподключение'},
+  route:{t:'Маршрутизация',c:'#5AA9FF',k:'российские сайты ру рф напрямую заблокированные обход маршруты'},
+  apps:{t:'Приложения без VPN',c:'#FF9F6B',k:'исключения программы игры exe напрямую мимо vpn split'},
+  update:{t:'Обновление',c:'#6BD68A',k:'версия обновить установить загрузка подпись'},
+  log:{t:'Журнал',c:'#F0716B',k:'лог журнал ошибки диагностика скопировать поддержка'}};
+const GROUPS=[['Подключение',['start','route','apps']],['О приложении',['update','log']]];
+let SET={},query='',page='',lastMenu='';
+function plural(n,a,b,c){const m10=n%10,m100=n%100;return m10===1&&m100!==11?a:m10>=2&&m10<=4&&(m100<12||m100>14)?b:c}
+function subText(id){
+  switch(id){
+    case 'subs':{const n=SET.subs||0,srv=(SET.summary||'').split(' ·')[0];
+      return n+' '+plural(n,'подписка','подписки','подписок')+' · '+(srv?srv.toLowerCase():SET.updated?'загружены':'ещё не загружались')}
+    case 'start':return SET.autorun?(SET.autoStart?'С Windows, VPN включается сам':'Вместе с Windows'):SET.autoStart?'VPN включается при запуске':'Вручную';
+    case 'route':return SET.ruDirect?'Российские сайты напрямую':'Весь трафик через VPN';
+    case 'apps':return SET.apps?'Напрямую: '+SET.apps:'Все программы через VPN';
+    case 'update':return UPD.version?'Доступна версия '+UPD.version:'Версия '+(S.version||'');
+    default:return 'Что происходило с подключением';
+  }
+}
+function mrow(id,big){const p=PAGES[id],news=id==='update'&&!!UPD.version;
+  return `<div class="mrow${big?' big':''}" onclick="openPage('${id}')"><div class="mic" style="background:${p.c}26"><svg viewBox="0 0 24 24" fill="none" stroke="${p.c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[id]}</svg></div>
+    <div class="grow"><div class="b ell">${p.t}</div><div class="sub ell${news?' news':''}">${esc(subText(id))}</div></div>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6F6B82" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></div>`}
+function menuKey(){return JSON.stringify([SET,UPD.version||'',S.version||'',query])}
+function renderMenu(){
+  lastMenu=menuKey();
+  $('herobox').innerHTML=mrow('subs',true);
+  $('setclear').style.display=query?'':'none';
+  const q=query.trim().toLowerCase();let h='';
+  if(!q){for(const [name,ids] of GROUPS)h+=`<div class="glabel">${name}</div><div class="mgroup">${ids.map(id=>mrow(id)).join('')}</div>`}
+  else{const hits=Object.keys(PAGES).filter(id=>{const hay=(PAGES[id].t+' '+subText(id)+' '+PAGES[id].k).toLowerCase();return q.split(/\s+/).every(w=>hay.includes(w))});
+    h=hits.length?`<div class="mgroup" style="margin-top:16px">${hits.map(id=>mrow(id)).join('')}</div>`:'<div class="m" style="text-align:center;padding-top:32px">Ничего не нашлось</div>'}
+  $('menubody').innerHTML=h;
+}
+function clearSearch(){$('setsearch').value='';query='';renderMenu()}
+function openPage(id){
+  if(id==='apps'){show('apps');return}
+  page=id;$('ptitle').textContent=PAGES[id].t;
+  document.querySelectorAll('.page').forEach(e=>e.classList.toggle('on',e.dataset.page===id));
+  show('spage');document.querySelector('#v-spage .scroll').scrollTop=0;
+}
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;
+  if(view==='spage')show('settings');else if(view==='apps')leaveApps();else if(view==='servers')leaveServers();else if(view==='settings')show('main')});
+let newsShown=false;
+function showNews(list){if(newsShown||!list||!list.length)return;newsShown=true;
+  $('newstitle').textContent='Что нового в Dash '+S.version;$('newslist').innerHTML=list.map(t=>`<li>${esc(t)}</li>`).join('');$('news').classList.add('on')}
+async function newsSeen(){$('news').classList.remove('on');await api('/api/news/seen')}
 let confirmed=null;
 function confirmBox(q){return window.confirm(q)}
 async function setOpt(key,el){const v=!el.classList.contains('on');el.classList.toggle('on',v);await api('/api/settings',{[key]:v});if(S.state!=='off')toast('Переподключение для применения')}
@@ -419,7 +520,7 @@ let UPD={};
 function updAction(){if(UPD.progress>=0)return;if(UPD.version)api('/api/update/install').then(poll);else checkUpd()}
 async function checkUpd(){toast('Проверка…');const r=await api('/api/update/check');toast(r.version?'Доступна версия '+r.version:'Установлена последняя версия');poll()}
 show('main');poll();setInterval(poll,1000);
-setInterval(()=>{if(view==='settings')api('/api/log').then(r=>$('log').textContent=r.text||'Пока пусто')},3000);
+setInterval(()=>{if(view==='spage'&&page==='log')api('/api/log').then(r=>$('log').textContent=r.text||'Пока пусто')},3000);
 </script>
 </body>
 </html>
