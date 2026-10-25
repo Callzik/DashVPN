@@ -153,6 +153,61 @@ func prepareDataRoot() error {
 	return nil
 }
 
+// webviewDir returns a WebView2 data folder Dash can actually write to. Antivirus cleanups can
+// leave the old one with broken permissions or locked files, and WebView2 then shows only an empty
+// window. A broken folder is moved aside and a fresh one is made, still inside the admin-only root:
+// a profile in %LOCALAPPDATA% could be changed by any program of the user and the page runs elevated.
+func webviewDir(root string) string {
+	dir := filepath.Join(root, "webview")
+	if old, _ := filepath.Glob(dir + ".broken-*"); len(old) > 0 {
+		for _, o := range old {
+			_ = os.RemoveAll(o)
+		}
+	}
+	if writable(dir) {
+		return dir
+	}
+	aside := dir + ".broken-" + strconv.FormatInt(time.Now().Unix(), 10)
+	if err := os.Rename(dir, aside); err == nil || os.IsNotExist(err) {
+		if writable(dir) {
+			return dir
+		}
+	}
+	// the old folder could not even be moved (e.g. held open): use a spare one next to it
+	if spare := dir + "-spare"; writable(spare) {
+		return spare
+	}
+	return dir
+}
+
+// writable checks that dir and the WebView2 profile inside it accept new files and that the
+// existing profile state can be opened for writing.
+func writable(dir string) bool {
+	if isReparse(dir) {
+		return false
+	}
+	eb := filepath.Join(dir, "EBWebView")
+	if err := os.MkdirAll(eb, 0700); err != nil {
+		return false
+	}
+	probe := filepath.Join(eb, ".dash-probe")
+	if err := os.WriteFile(probe, []byte("ok"), 0600); err != nil {
+		return false
+	}
+	if err := os.Remove(probe); err != nil {
+		return false
+	}
+	for _, f := range []string{filepath.Join(eb, "Local State"), filepath.Join(eb, "Default", "Preferences")} {
+		h, err := os.OpenFile(f, os.O_RDWR, 0)
+		if err == nil {
+			h.Close()
+		} else if !os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
 // migrateOldData copies settings and cached subscriptions from the old per-user folder once.
 func migrateOldData(root string) {
 	old := oldDataRoot()
