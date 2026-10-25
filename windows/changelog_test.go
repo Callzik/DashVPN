@@ -6,7 +6,13 @@ func TestWhatsNew(t *testing.T) {
 	if got := whatsNew(Version); len(got) != 0 {
 		t.Fatalf("nothing is new for the running version, got %v", got)
 	}
-	if got, want := len(whatsNew("")), len(changelog[Version]); got != want {
+	want := 0
+	for v, lines := range changelog {
+		if newer(v, "1.5.3") {
+			want += len(lines)
+		}
+	}
+	if got := len(whatsNew("")); got != want {
 		t.Fatalf("settings without a seen version get only what came after 1.5.3: %d lines, want %d", got, want)
 	}
 	all := whatsNew("1.4.9")

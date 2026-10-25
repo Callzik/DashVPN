@@ -24,6 +24,9 @@ var changelog = map[string][]string{
 		"Если сервер отвечает на пинг, но не пропускает трафик, Dash уходит на другой",
 		"Новый экран настроек: разделы с иконками и поиск",
 	},
+	"1.6.1": {
+		"Если антивирус испортил служебную папку окна, Dash сам создаёт новую вместо пустого окна с ошибкой",
+	},
 }
 
 // whatsNew lists the entries newer than seen up to the running version, oldest first.

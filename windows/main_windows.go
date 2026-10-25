@@ -150,7 +150,7 @@ func main() {
 	done := make(chan struct{})
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		AutoFocus: true,
-		DataPath:  filepath.Join(app.Dir, "webview"),
+		DataPath:  webviewDir(app.Dir),
 		WindowOptions: webview2.WindowOptions{
 			Title: "Dash", Width: 440, Height: 820, IconId: 2, Center: true,
 		},
