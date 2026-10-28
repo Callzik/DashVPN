@@ -24,18 +24,17 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * All servers with their ping, grouped like the settings menu: "Авто" on a big card on top,
- * then main, LTE and turned-off servers. Tap one to use it, long press to turn it off.
+ * All servers with their ping: "Авто" on its own card, then main, LTE and turned-off servers.
+ * A check marks the chosen one, a dot the one auto uses now. Tap to use, long press to turn off.
  */
 public class ServersActivity extends Activity {
-    private static final int GOOD = 0xFF6BD68A, GOOD_TINT = 0xFF14271B;
+    private static final int GOOD = 0xFF6BD68A;
 
     private Prefs prefs;
     private final List<Server> items = new ArrayList<>();
-    private TextView test, hint;
+    private View test;
     private LinearLayout autoBox, body;
     private View searchBox;
-    private boolean manySubs;
     private String query = "";
     private final Runnable refresh = new Runnable() {
         @Override public void run() { update(); }
@@ -73,8 +72,13 @@ public class ServersActivity extends Activity {
         TextView title = Ui.text(c, "Серверы", 22, Ui.FG, true);
         title.setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 8), 0);
         top.addView(title, Ui.weight());
-        test = Ui.button(c, "Проверить", false);
-        test.setMinHeight(Ui.dp(c, 44));
+        FrameLayout refreshBtn = new FrameLayout(c);
+        refreshBtn.setBackground(Ui.round(c, Ui.SURFACE, 14, Ui.LINE));
+        refreshBtn.setForeground(ripple());
+        refreshBtn.setClipToOutline(true);
+        refreshBtn.setContentDescription("Проверить пинг");
+        refreshBtn.addView(new IconView(c, IconView.REFRESH, Ui.FG), new FrameLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20), Gravity.CENTER));
+        test = refreshBtn;
         test.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 BoxVpnService s = BoxVpnService.instance;
@@ -85,18 +89,15 @@ public class ServersActivity extends Activity {
                 s.pingAll();
             }
         });
-        top.addView(test);
+        top.addView(test, new LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)));
         top.setPadding(0, 0, 0, Ui.dp(c, 8));
         col.addView(top);
 
         autoBox = new LinearLayout(c);
         autoBox.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{Ui.ACCENT_TINT, Ui.SURFACE});
-        g.setCornerRadius(Ui.dp(c, 22));
-        g.setStroke(Ui.dp(c, 1), Ui.LINE2);
-        autoBox.setBackground(g);
+        autoBox.setBackground(Ui.round(c, Ui.SURFACE, 22, Ui.LINE));
         autoBox.setClipToOutline(true);
-        col.addView(autoBox, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 16));
+        col.addView(autoBox, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
 
         searchBox = searchBox(c);
         col.addView(searchBox, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
@@ -105,10 +106,6 @@ public class ServersActivity extends Activity {
         body.setOrientation(LinearLayout.VERTICAL);
         col.addView(body);
 
-        hint = Ui.text(c, "", 13, Ui.MUTED, false);
-        hint.setGravity(Gravity.CENTER);
-        hint.setPadding(Ui.dp(c, 8), 0, Ui.dp(c, 8), 0);
-        col.addView(hint, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 18));
     }
 
     @Override
@@ -195,12 +192,9 @@ public class ServersActivity extends Activity {
             }
         }
         items.clear();
-        java.util.Set<String> subs = new java.util.HashSet<>();
         for (Server s : src) {
             if (s.group != Server.EXCLUDED || s.off) items.add(s);
-            subs.add(s.sub);
         }
-        manySubs = subs.size() > 1;
         Collections.sort(items, new Comparator<Server>() {
             @Override public int compare(Server a, Server b) {
                 int pa = ping(a), pb = ping(b);
@@ -210,10 +204,7 @@ public class ServersActivity extends Activity {
             }
         });
         boolean on = AppState.vpn == AppState.ON;
-        test.setText(AppState.pinging ? "Проверка…" : "Проверить");
-        test.setAlpha(on && !AppState.pinging ? 1f : 0.5f);
-        hint.setText((on ? "" : "Подключитесь, чтобы увидеть пинг. ")
-                + "Долгое нажатие на сервер — отключить или включить." + (off.isEmpty() ? "" : " Отключено: " + off.size()));
+        test.setAlpha(on && !AppState.pinging ? 1f : 0.4f);
         render();
     }
 
@@ -228,11 +219,9 @@ public class ServersActivity extends Activity {
         boolean on = AppState.vpn == AppState.ON;
 
         autoBox.removeAllViews();
-        String autoSub = pinned.isEmpty() && on && !AppState.serverName.isEmpty()
-                ? "Сейчас: " + AppState.serverName : "Лучший сервер выбирается сам";
-        autoBox.addView(row(c, null, "Авто", autoSub, false, null, pinned.isEmpty(), true));
+        autoBox.addView(row(c, null, pinned.isEmpty(), false));
 
-        searchBox.setVisibility(items.size() > 5 ? View.VISIBLE : View.GONE);
+        searchBox.setVisibility(items.size() > 8 ? View.VISIBLE : View.GONE);
         String q = query.trim().toLowerCase();
         List<Server> main = new ArrayList<>(), lte = new ArrayList<>(), offList = new ArrayList<>();
         for (Server s : items) {
@@ -242,9 +231,10 @@ public class ServersActivity extends Activity {
             else main.add(s);
         }
         body.removeAllViews();
-        group(c, "Основные", main, pinned, on);
-        group(c, "Резервные (LTE)", lte, pinned, on);
-        group(c, "Отключённые", offList, pinned, on);
+        String now = pinned.isEmpty() && on ? AppState.serverName : "";
+        group(c, null, main, pinned, now);
+        group(c, "LTE", lte, pinned, now);
+        group(c, "Отключены", offList, pinned, now);
         if (body.getChildCount() == 0) {
             TextView none = Ui.text(c, q.isEmpty() ? "Серверов пока нет" : "Ничего не нашлось", 14, Ui.MUTED, false);
             none.setGravity(Gravity.CENTER);
@@ -255,21 +245,18 @@ public class ServersActivity extends Activity {
 
     private static boolean matches(Server s, String q) {
         if (q.isEmpty()) return true;
-        String hay = (s.name + " " + s.sub + (s.xray != null ? " xhttp" : "")
-                + (s.origGroup == Server.LTE ? " резервный lte" : " основной")).toLowerCase();
+        String hay = (s.name + " " + s.sub + (s.xray != null ? " xhttp" : "") + (s.origGroup == Server.LTE ? " lte" : "")).toLowerCase();
         for (String w : q.split("\\s+")) if (!hay.contains(w)) return false;
         return true;
     }
 
-    private void group(Context c, String name, List<Server> list, String pinned, boolean on) {
+    private void group(Context c, String name, List<Server> list, String pinned, String now) {
         if (list.isEmpty()) return;
-        LinearLayout label = Ui.row(c);
-        label.addView(Ui.text(c, name, 13, Ui.MUTED, true));
-        TextView n = Ui.text(c, "  " + list.size(), 13, 0xFF6F6B82, true);
-        label.addView(n);
-        label.setPadding(Ui.dp(c, 6), Ui.dp(c, 22), 0, 0);
-        body.addView(label);
-
+        if (name != null) {
+            TextView label = Ui.text(c, name, 13, Ui.MUTED, true);
+            label.setPadding(Ui.dp(c, 6), Ui.dp(c, 22), 0, 0);
+            body.addView(label);
+        }
         LinearLayout card = new LinearLayout(c);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(Ui.round(c, Ui.SURFACE, 22, Ui.LINE));
@@ -279,102 +266,69 @@ public class ServersActivity extends Activity {
                 View d = new View(c);
                 d.setBackgroundColor(Ui.LINE);
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, Ui.dp(c, 0.7f)));
-                p.leftMargin = Ui.dp(c, 70);
+                p.leftMargin = Ui.dp(c, 64);
                 card.addView(d, p);
             }
-            final Server s = list.get(i);
-            boolean sel = s.name.equals(pinned);
-            boolean now = on && s.name.equals(AppState.serverName);
-            int p = ping(s);
-            List<String> bits = new ArrayList<>();
-            if (s.xray != null) bits.add("xhttp");
-            if (manySubs && !s.sub.isEmpty()) bits.add(s.sub);
-            String sub;
-            if (now && !sel) {
-                sub = "Сейчас используется" + (bits.isEmpty() ? "" : " · " + TextUtils.join(" · ", bits));
-            } else if (!bits.isEmpty()) {
-                sub = TextUtils.join(" · ", bits);
-            } else if (isOff(s)) {
-                sub = "Не участвует в автовыборе";
-            } else {
-                sub = p > 0 ? new String[]{"", "медленный", "средний", "быстрый"}[quality(p)] : p < 0 ? "Нет ответа" : "Пинг ещё не проверен";
-            }
-            View r = row(c, s, null, sub, now && !sel, isOff(s) ? null : pill(c, p), sel, false);
-            if (isOff(s)) r.setAlpha(0.45f);
-            card.addView(r);
+            Server s = list.get(i);
+            card.addView(row(c, s, s.name.equals(pinned), s.name.equals(now)));
         }
-        body.addView(card, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+        body.addView(card, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, name == null ? 12 : 8));
     }
 
-    /** One row: flag tile (or lightning for "Авто"), name and subtitle, ping pill, radio. */
-    private View row(Context c, final Server s, String title, String sub, boolean subAccent, View right, boolean sel, boolean big) {
+    /** One line: flag (or lightning for "Авто"), name, dot if in use, ping, check if chosen. */
+    private View row(Context c, final Server s, boolean sel, boolean now) {
         LinearLayout row = Ui.row(c);
-        row.setPadding(Ui.dp(c, 14), Ui.dp(c, big ? 18 : 12), Ui.dp(c, 14), Ui.dp(c, big ? 18 : 12));
-        row.setMinimumHeight(Ui.dp(c, big ? 76 : 64));
-        if (sel && !big) {
-            GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0x1A8B7CFF, 0x008B7CFF});
-            row.setBackground(g);
-            row.setForeground(ripple());
-        } else {
-            row.setBackground(ripple());
-        }
+        row.setPadding(Ui.dp(c, 14), Ui.dp(c, 10), Ui.dp(c, 14), Ui.dp(c, 10));
+        row.setMinimumHeight(Ui.dp(c, 58));
+        row.setBackground(ripple());
         row.setClickable(true);
         row.setFocusable(true);
 
-        int ts = big ? 46 : 42;
         FrameLayout tile = new FrameLayout(c);
-        String name = title;
+        String name;
         if (s == null) {
-            tile.setBackground(Ui.round(c, 0x268B7CFF, big ? 15 : 13, 0));
-            tile.addView(new IconView(c, IconView.AUTO, Ui.ACCENT), new FrameLayout.LayoutParams(Ui.dp(c, 26), Ui.dp(c, 26), Gravity.CENTER));
+            name = "Авто";
+            tile.setBackground(Ui.round(c, 0x268B7CFF, 11, 0));
+            tile.addView(new IconView(c, IconView.AUTO, Ui.ACCENT), new FrameLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20), Gravity.CENTER));
         } else {
             String[] fl = splitFlag(s.name);
             name = fl[1];
-            GradientDrawable bg = Ui.round(c, Ui.SURFACE2, 13, 0);
-            if (sel) bg.setStroke(Ui.dp(c, 2), Ui.ACCENT);
-            tile.setBackground(bg);
+            tile.setBackground(Ui.round(c, Ui.SURFACE2, 11, 0));
             boolean hasFlag = !fl[0].isEmpty();
             String letter = name.trim().isEmpty() ? "?" : name.trim().substring(0, 1).toUpperCase();
-            TextView f = Ui.text(c, hasFlag ? fl[0] : letter, hasFlag ? 22 : 16, Ui.MUTED, !hasFlag);
+            TextView f = Ui.text(c, hasFlag ? fl[0] : letter, hasFlag ? 19 : 15, Ui.MUTED, !hasFlag);
             f.setGravity(Gravity.CENTER);
             tile.addView(f, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
-        row.addView(tile, new LinearLayout.LayoutParams(Ui.dp(c, ts), Ui.dp(c, ts)));
+        row.addView(tile, new LinearLayout.LayoutParams(Ui.dp(c, 36), Ui.dp(c, 36)));
 
-        LinearLayout text = new LinearLayout(c);
-        text.setOrientation(LinearLayout.VERTICAL);
-        text.setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 8), 0);
-        TextView t = Ui.text(c, name, big ? 18 : 16, Ui.FG, true);
+        TextView t = Ui.text(c, name, 16, Ui.FG, sel);
         t.setSingleLine(true);
         t.setEllipsize(TextUtils.TruncateAt.END);
-        text.addView(t);
-        TextView st = Ui.text(c, sub, 13, subAccent ? Ui.ACCENT : Ui.MUTED, false);
-        st.setSingleLine(true);
-        st.setEllipsize(TextUtils.TruncateAt.END);
-        text.addView(st, Ui.lp(c, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 2));
-        row.addView(text, Ui.weight());
+        t.setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 8), 0);
+        row.addView(t, Ui.weight());
 
-        if (right != null) row.addView(right);
-        if (s != null && isOff(s)) {
-            TextView o = Ui.badge(c);
-            o.setText("отключён");
-            row.addView(o);
+        if (now) {
+            View dot = new View(c);
+            GradientDrawable dg = new GradientDrawable();
+            dg.setShape(GradientDrawable.OVAL);
+            dg.setColor(Ui.ACCENT);
+            dot.setBackground(dg);
+            LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(Ui.dp(c, 7), Ui.dp(c, 7));
+            dp.rightMargin = Ui.dp(c, 10);
+            row.addView(dot, dp);
         }
-        View radio = new View(c);
-        GradientDrawable rg = new GradientDrawable();
-        rg.setShape(GradientDrawable.OVAL);
+        int p = s == null ? 0 : ping(s);
+        if (s != null && !isOff(s) && p != 0) row.addView(pingView(c, p));
         if (sel) {
-            rg.setColor(Ui.ACCENT);
-        } else {
-            rg.setColor(0);
-            rg.setStroke(Ui.dp(c, 2), Ui.LINE2);
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20));
+            cp.leftMargin = Ui.dp(c, 12);
+            row.addView(new IconView(c, IconView.CHECK, Ui.ACCENT), cp);
         }
-        radio.setBackground(sel ? new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{rg, dot(c)}) : rg);
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22));
-        rp.leftMargin = Ui.dp(c, 12);
-        row.addView(radio, rp);
+        if (s != null && isOff(s)) row.setAlpha(0.4f);
 
-        row.setContentDescription(s == null ? name + ". " + sub : s.name + ". " + sub + (sel ? ". Выбран" : ""));
+        String desc = s == null ? name : s.name + (p > 0 ? ", " + p + " мс" : p < 0 ? ", не отвечает" : "");
+        row.setContentDescription(desc + (now ? ", используется сейчас" : "") + (sel ? ", выбран" : ""));
         row.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 if (s == null) choose("");
@@ -393,29 +347,17 @@ public class ServersActivity extends Activity {
         return row;
     }
 
-    private static android.graphics.drawable.Drawable dot(Context c) {
-        GradientDrawable d = new GradientDrawable();
-        d.setShape(GradientDrawable.OVAL);
-        d.setColor(Ui.ACCENT_INK);
-        android.graphics.drawable.InsetDrawable in = new android.graphics.drawable.InsetDrawable(d, Ui.dp(c, 7));
-        return in;
-    }
-
-    /** Coloured ping pill with signal bars, or null while the ping is unknown. */
-    private static View pill(Context c, int p) {
-        if (p == 0) return null;
+    /** Signal bars and ms in the ping colour, or a red dash when the server does not answer. */
+    private static View pingView(Context c, int p) {
         int q = quality(p);
         int fg = p < 0 || q == 1 ? Ui.BAD : q == 2 ? Ui.WARN : GOOD;
-        int bg = p < 0 || q == 1 ? Ui.BAD_TINT : q == 2 ? Ui.WARN_TINT : GOOD_TINT;
         LinearLayout l = Ui.row(c);
-        l.setBackground(Ui.round(c, bg, 12, 0));
-        l.setPadding(Ui.dp(c, 10), Ui.dp(c, 5), Ui.dp(c, 10), Ui.dp(c, 5));
         if (p > 0) {
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(Ui.dp(c, 13), Ui.dp(c, 12));
-            bp.rightMargin = Ui.dp(c, 7);
+            bp.rightMargin = Ui.dp(c, 6);
             l.addView(new Bars(c, p < 150 ? 3 : p < 400 ? 2 : 1, fg), bp);
         }
-        l.addView(Ui.text(c, p > 0 ? p + " мс" : "не отвечает", 13, fg, true));
+        l.addView(Ui.text(c, p > 0 ? String.valueOf(p) : "—", 14, fg, true));
         return l;
     }
 
@@ -469,7 +411,7 @@ public class ServersActivity extends Activity {
         box.addView(new IconView(c, IconView.SEARCH, Ui.MUTED), new LinearLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20)));
         final EditText in = new EditText(c);
         in.setBackground(null);
-        in.setHint("Поиск сервера");
+        in.setHint("Поиск");
         in.setHintTextColor(0xFF6F6B82);
         in.setTextColor(Ui.FG);
         in.setTextSize(16);

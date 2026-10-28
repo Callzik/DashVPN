@@ -54,6 +54,9 @@ public final class Changelog {
                 "Серверы разделены на основные, резервные (LTE) и отключённые, видно, какой сервер работает сейчас",
                 "Поиск по серверам, когда их больше пяти",
         });
+        ENTRIES.put(41, new String[]{
+                "Экран серверов стал проще: без лишних подписей, пинг цифрой с полосками, галочка у выбранного сервера и точка у того, что работает сейчас",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
