@@ -49,6 +49,11 @@ public final class Changelog {
         ENTRIES.put(39, new String[]{
                 "Samsung: уведомление VPN попадает в Now Bar и таблетку в строке состояния без настроек для разработчиков",
         });
+        ENTRIES.put(40, new String[]{
+                "Новый экран серверов: флаги стран, цветной пинг с полосками сигнала, «Авто» на отдельной карточке сверху",
+                "Серверы разделены на основные, резервные (LTE) и отключённые, видно, какой сервер работает сейчас",
+                "Поиск по серверам, когда их больше пяти",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

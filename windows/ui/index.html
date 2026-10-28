@@ -101,6 +101,23 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 .menu{position:fixed;background:var(--surface2);border:1px solid var(--line2);border-radius:12px;padding:4px;display:none;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .menu button{display:block;width:100%;text-align:left;padding:8px 14px;border-radius:8px;font-size:14px}
 .menu button:hover{background:var(--line)}
+/* servers: flag tile, name, coloured ping pill, radio */
+.srow .flag{width:42px;height:42px;border-radius:13px;background:var(--surface2);display:grid;place-items:center;flex:none;font-size:24px;line-height:1}
+.srow .flag.txt{font-size:16px;font-weight:700;color:var(--muted)}
+.srow.sel{background:linear-gradient(90deg,rgba(139,124,255,.10),rgba(139,124,255,0) 70%)}
+.srow.sel .flag{box-shadow:0 0 0 2px var(--accent)}
+.srow.off{opacity:.45}
+.srow .sub.now{color:var(--accent)}
+.ping{display:inline-flex;align-items:center;gap:7px;border-radius:12px;padding:5px 10px;font-weight:600;font-size:13px;white-space:nowrap;background:var(--surface2);color:var(--muted)}
+.ping.p1{background:#14271B;color:#6BD68A}.ping.p2{background:var(--warn-tint);color:var(--warn)}.ping.p3{background:var(--bad-tint);color:var(--bad)}
+.bars{display:inline-flex;align-items:flex-end;gap:2px;height:12px}
+.bars i{width:3px;border-radius:1.5px;background:currentColor;opacity:.25}
+.bars i:nth-child(1){height:5px}.bars i:nth-child(2){height:8px}.bars i:nth-child(3){height:12px}
+.bars.l1 i:nth-child(-n+1),.bars.l2 i:nth-child(-n+2),.bars.l3 i:nth-child(-n+3){opacity:1}
+.radio{width:22px;height:22px;border-radius:11px;border:2px solid var(--line2);flex:none;display:grid;place-items:center}
+.radio.on{border-color:var(--accent);background:var(--accent)}
+.radio.on::after{content:"";width:8px;height:8px;border-radius:4px;background:var(--accent-ink)}
+.cnt{color:#6F6B82;font-weight:600}
 /* settings menu */
 .mgroup{background:var(--surface);border:1px solid var(--line);border-radius:20px;overflow:hidden}
 .hero-card{background:linear-gradient(135deg,var(--accent-tint),var(--surface));border-color:var(--line2)}
@@ -160,8 +177,14 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 <section class="view" id="v-servers">
   <div class="top"><button class="back" onclick="leaveServers()">←</button><h1>Серверы</h1>
     <button class="secondary" id="testbtn" onclick="api('/api/ping-all').then(loadServers)">Проверить</button></div>
-  <div class="m" id="srvhint" style="margin-top:10px"></div>
-  <div class="scroll" id="srvlist"></div>
+  <div class="scroll">
+    <div class="mgroup hero-card" id="srvauto"></div>
+    <label class="search" id="srvsearchbox"><svg viewBox="0 0 24 24" fill="none" stroke="#9C98B0" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg>
+      <input id="srvsearch" placeholder="Поиск сервера" oninput="srvQuery=this.value;loadServers()" onkeydown="if(event.key==='Escape'&&this.value){event.stopPropagation();clearSrvSearch()}">
+      <button class="x" id="srvclear" style="display:none" title="Очистить" onclick="clearSrvSearch()">✕</button></label>
+    <div id="srvlist"></div>
+    <div class="m" id="srvhint" style="text-align:center;margin:18px 8px 6px"></div>
+  </div>
 </section>
 
 <!-- settings: menu -->
@@ -315,37 +338,60 @@ async function poll(){
   if(view==='settings'&&menuKey()!==lastMenu)renderMenu();
 }
 
+let srvQuery='';
+const FLAG=/^((?:\uD83C[\uDDE6-\uDDFF]){2})\s*/;
+function splitFlag(name){const m=name.match(FLAG);return m?[m[1],name.slice(m[0].length)||name]:['',name]}
+// colour keeps the old 300/400 ms thresholds; bars add detail inside the green zone
+function pq(p){return p<=0?0:p<300?3:p<400?2:1}
+function pingPill(p){
+  if(p<0)return '<span class="ping p3">не отвечает</span>';
+  if(p===0)return '';
+  const l=p<150?3:p<400?2:1;return `<span class="ping p${4-pq(p)}"><span class="bars l${l}"><i></i><i></i><i></i></span>${p} мс</span>`}
+const AUTO_IC='<svg viewBox="0 0 24 24" fill="none" stroke="#8B7CFF" stroke-width="1.8" stroke-linejoin="round"><path d="M13 2.5 5 13.5h6.5l-1 8 8.5-11h-6.5z"/></svg>';
+function srow(s,pinned,many){
+  const [flag,title]=splitFlag(s.name);
+  const sel=pinned===s.name,now=S.state==='on'&&S.server===s.name;
+  const bits=[];if(s.xhttp)bits.push('xhttp');if(many&&s.sub)bits.push(esc(s.sub));
+  let sub=now&&!sel?'Сейчас используется':bits.join(' · ')||(s.off?'Не участвует в автовыборе':s.ping>0?['','медленный','средний','быстрый'][pq(s.ping)]:s.ping<0?'Нет ответа':'Пинг ещё не проверен');
+  if(now&&!sel&&bits.length)sub+=' · '+bits.join(' · ');
+  const right=s.off?'<span class="ping">отключён</span>':pingPill(s.ping);
+  const tile=flag?`<div class="flag">${flag}</div>`:`<div class="flag txt">${esc((title.trim()[0]||'?').toUpperCase())}</div>`;
+  return `<div class="mrow srow${sel?' sel':''}${s.off?' off':''}" data-name="${esc(s.name)}" data-off="${s.off}">${tile}
+    <div class="grow"><div class="b ell">${esc(title)}</div><div class="sub ell${now?' now':''}">${sub}</div></div>${right}<span class="radio${sel?' on':''}"></span></div>`}
 async function loadServers(){
   const r=await api('/api/servers');const list=r.servers||[];const pinned=r.pinned||'';
   const subs=new Set(list.map(s=>s.sub));const many=subs.size>1;
   const on=S.state==='on';
   $('testbtn').textContent=S.pinging?'Проверка…':'Проверить';$('testbtn').style.opacity=on&&!S.pinging?1:.5;
+  const autoSub=pinned?'Лучший сервер выбирается сам':on&&S.server?'Сейчас: '+S.server:'Лучший сервер выбирается сам';
+  $('srvauto').innerHTML=`<div class="mrow big srow${pinned?'':' sel'}" onclick="pin('')"><div class="mic" style="background:#8B7CFF26">${AUTO_IC}</div>
+    <div class="grow"><div class="b">Авто</div><div class="sub ell">${esc(autoSub)}</div></div><span class="radio${pinned?'':' on'}"></span></div>`;
+  $('srvsearchbox').style.display=list.length>5?'':'none';$('srvclear').style.display=srvQuery?'':'none';
+  const q=srvQuery.trim().toLowerCase();
+  const hit=s=>!q||q.split(/\s+/).every(w=>(s.name+' '+s.sub+(s.xhttp?' xhttp':'')+(s.group==='lte'?' резервный lte':' основной')).toLowerCase().includes(w));
+  const shown=list.filter(hit);
+  const groups=[['Основные',shown.filter(s=>!s.off&&s.group!=='lte')],['Резервные (LTE)',shown.filter(s=>!s.off&&s.group==='lte')],['Отключённые',shown.filter(s=>s.off)]];
+  let h='';
+  for(const [name,items] of groups)if(items.length)
+    h+=`<div class="glabel">${name} <span class="cnt">${items.length}</span></div><div class="mgroup">${items.map(s=>srow(s,pinned,many)).join('')}</div>`;
+  if(!shown.length)h=`<div class="m" style="text-align:center;padding-top:32px">${q?'Ничего не нашлось':'Серверов пока нет'}</div>`;
+  const box=$('srvlist');const sc=box.parentNode;const top=sc.scrollTop;box.innerHTML=h;sc.scrollTop=top;
   const offN=list.filter(s=>s.off).length;
-  $('srvhint').textContent=(on?'Клик — использовать сервер. «Авто» выбирает лучший сам.':'Подключитесь, чтобы увидеть пинг. Выбор применится при подключении.')+' Правый клик — отключить или включить сервер.'+(offN?' Отключено: '+offN:'');
-  let h=`<div class="item" onclick="pin('')"><div class="grow"><div class="b">Авто</div><div class="m">Лучший сервер выбирается сам</div></div><span class="pv good">${pinned?'':'✓'}</span></div>`;
-  for(const s of list){
-    const sub=(s.group==='lte'?'резервный':'основной')+(s.xhttp?' · xhttp':'')+(many&&s.sub?' · '+esc(s.sub):'');
-    let right='';
-    if(s.off)right='<span class="pv" style="color:var(--muted)">отключён</span>';
-    else if(pinned===s.name)right=`<span class="pv good">${s.ping>0?s.ping+' мс  ':''}✓</span>`;
-    else if(s.ping>0)right=`<span class="pv ${pc(s.ping)}">${s.ping} мс</span>`;
-    else if(s.ping<0)right='<span class="pv bad">—</span>';
-    h+=`<div class="item ${s.off?'off':''}" data-name="${esc(s.name)}" data-off="${s.off}"><div class="grow"><div class="b ell">${esc(s.name)}</div><div class="m ell">${sub}</div></div>${right}</div>`;
-  }
-  const box=$('srvlist');const top=box.scrollTop;box.innerHTML=h;box.scrollTop=top;
-  box.querySelectorAll('.item[data-name]').forEach(el=>{
+  $('srvhint').textContent=(on?'':'Подключитесь, чтобы увидеть пинг. ')+'Правый клик по серверу — отключить или включить.'+(offN?' Отключено: '+offN:'');
+  box.querySelectorAll('.srow[data-name]').forEach(el=>{
     const name=el.dataset.name,off=el.dataset.off==='true';
     el.onclick=()=>off?toast('Сервер отключён. Правый клик — включить'):pin(name);
     el.oncontextmenu=e=>{e.preventDefault();openMenu(e.clientX,e.clientY,off?'Включить сервер':'Отключить сервер',async()=>{
       await api('/api/off',{name,off:!off});offChanged=true;loadServers();})};
   });
 }
+function clearSrvSearch(){$('srvsearch').value='';srvQuery='';loadServers()}
 async function pin(name){await api('/api/pin',{name});toast(name?'Выбран: '+name:'Автовыбор');setTimeout(poll,600);loadServers()}
 function leaveServers(){show('main');if(offChanged&&S.state!=='off'){api('/api/apply');toast('Переподключение для применения')}offChanged=false}
 function openMenu(x,y,label,fn){const m=$('menu');m.innerHTML=`<button>${label}</button>`;m.firstChild.onclick=()=>{m.style.display='none';fn()};
   m.style.display='block';m.style.left=Math.min(x,innerWidth-200)+'px';m.style.top=Math.min(y,innerHeight-60)+'px'}
 document.addEventListener('click',()=>$('menu').style.display='none');
-document.addEventListener('contextmenu',e=>{if(!e.target.closest('.item'))e.preventDefault()});
+document.addEventListener('contextmenu',e=>{if(!e.target.closest('.srow'))e.preventDefault()});
 
 async function loadSettings(){
   const r=await api('/api/subs');
