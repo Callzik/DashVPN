@@ -36,6 +36,9 @@ var changelog = map[string][]string{
 	"1.7.1": {
 		"Экран серверов стал проще: без лишних подписей, пинг цифрой с полосками, галочка у выбранного сервера и точка у того, что работает сейчас",
 	},
+	"1.7.2": {
+		"Запасной адрес проверки обновлений, если провайдер блокирует GitHub",
+	},
 }
 
 // whatsNew lists the entries newer than seen up to the running version, oldest first.

@@ -584,8 +584,10 @@ public class SettingsActivity extends Activity {
         else if (pr >= 0) updStatus.setText("Загрузка " + Updater.newVersion + " · " + pr + "%");
         else if (!Updater.error.isEmpty()) updStatus.setText(Updater.error);
         else if (!Updater.newVersion.isEmpty()) updStatus.setText("Доступна версия " + Updater.newVersion);
+        else if (Updater.checking) updStatus.setText("Проверка обновлений…");
+        else if (!Updater.checkError.isEmpty()) updStatus.setText(Updater.checkError + ". Версия " + verName());
         else updStatus.setText("У вас последняя версия " + verName());
-        updBtn.setEnabled(pr < 0);
+        updBtn.setEnabled(pr < 0 && !Updater.checking);
         updBtn.setText(pr >= 0 ? "Проверить обновление"
                 : !Updater.newVersion.isEmpty() ? "Установить " + Updater.newVersion : "Проверить обновление");
     }

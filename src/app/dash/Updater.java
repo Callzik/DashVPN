@@ -16,12 +16,12 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 
 /** Checks GitHub for a newer build and installs it (one tap: download + system install prompt). */
 public final class Updater {
-    static final String VERSION_URL = "https://raw.githubusercontent.com/Callzik/DashVPN-by-Claude/main/version.json";
+    static final String VERSION_URL = "https://raw.githubusercontent.com/Callzik/DashVPN/main/version.json";
+    // the same file from api.github.com, for providers that block raw.githubusercontent.com
+    static final String VERSION_API = "https://api.github.com/repos/Callzik/DashVPN/contents/version.json";
     static final String ACTION_STATUS = "app.dash.INSTALL_STATUS";
     private static final long CHECK_EVERY = 3 * 3600_000L;
 
@@ -31,7 +31,8 @@ public final class Updater {
     static volatile String apkSha = ""; // lowercase hex SHA-256 from version.json, empty if not published
     static volatile int progress = -1; // -1 idle, 0..100 downloading, 101 installing
     static volatile String error = "";
-    private static volatile boolean checking;
+    static volatile String checkError = ""; // last check failed, shown on the update page
+    static volatile boolean checking;
 
     private Updater() {}
 
@@ -59,7 +60,8 @@ public final class Updater {
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
-                    JSONObject a = new JSONObject(get(VERSION_URL)).getJSONObject("android");
+                    checkError = "";
+                    JSONObject a = new JSONObject(manifest()).getJSONObject("android");
                     int code = a.getInt("code");
                     String ver = a.getString("version"), url = a.getString("url");
                     String sha = a.optString("sha256", "").trim().toLowerCase(java.util.Locale.ROOT);
@@ -74,6 +76,7 @@ public final class Updater {
                         newVersion = "";
                     }
                 } catch (Exception e) {
+                    checkError = "Не удалось проверить обновления";
                     AppState.log("Проверка обновлений: " + e.getMessage());
                 } finally {
                     checking = false;
@@ -82,20 +85,34 @@ public final class Updater {
         }, "update-check").start();
     }
 
-    private static String get(String u) throws Exception {
-        HttpURLConnection h = (HttpURLConnection) new URL(u).openConnection();
-        h.setConnectTimeout(10000);
-        h.setReadTimeout(15000);
-        h.setUseCaches(false);
-        try (InputStream in = h.getInputStream()) {
-            java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
-            return b.toString("UTF-8");
-        } finally {
-            h.disconnect();
+    /** Proxy login of the running core, so requests can go out via the VPN server; null when it is off. */
+    private static String vpnLogin() {
+        BoxVpnService s = BoxVpnService.instance;
+        Clash cl = s == null ? null : s.clashApi();
+        return cl == null || AppState.vpn != AppState.ON ? null : "dash:" + cl.secret();
+    }
+
+    /** Ways to reach GitHub, best first: through the VPN when it is on (the provider may block GitHub), then directly. */
+    private static String[] routes() {
+        String vpn = vpnLogin();
+        return vpn == null ? new String[] {null} : new String[] {vpn, null};
+    }
+
+    private static String manifest() throws Exception {
+        Exception last = null;
+        for (String login : routes()) {
+            try {
+                return Fetch.text(VERSION_URL, "*/*", ConfigBuilder.PROBE_PORT, login);
+            } catch (Exception e) {
+                last = e;
+            }
+            try {
+                return Fetch.text(VERSION_API, "application/vnd.github.raw", ConfigBuilder.PROBE_PORT, login);
+            } catch (Exception e) {
+                last = e;
+            }
         }
+        throw last;
     }
 
     /** Called from the "Обновить" button. */
@@ -114,7 +131,18 @@ public final class Updater {
             @Override public void run() {
                 File f = new File(c.getCacheDir(), "update.apk");
                 try {
-                    download(url, f);
+                    Exception last = null;
+                    for (String login : routes()) {
+                        try {
+                            download(url, f, login);
+                            last = null;
+                            break;
+                        } catch (Exception e) {
+                            last = e;
+                            AppState.log("Обновление: " + (login == null ? "напрямую: " : "через VPN: ") + e.getMessage());
+                        }
+                    }
+                    if (last != null) throw last;
                     if (!sha.isEmpty() && !sha.equals(sha256(f))) {
                         f.delete();
                         error = "Файл обновления повреждён";
@@ -133,23 +161,20 @@ public final class Updater {
         }, "update-download").start();
     }
 
-    private static void download(String u, File out) throws Exception {
-        HttpURLConnection h = (HttpURLConnection) new URL(u).openConnection();
-        h.setConnectTimeout(15000);
-        h.setReadTimeout(30000);
-        h.setInstanceFollowRedirects(true);
-        long total = h.getContentLengthLong();
-        try (InputStream in = h.getInputStream(); OutputStream o = new FileOutputStream(out)) {
+    private static void download(String u, File out, String login) throws Exception {
+        progress = 0;
+        try (Fetch h = Fetch.open(u, "*/*", ConfigBuilder.PROBE_PORT, login, 30000);
+             OutputStream o = new FileOutputStream(out)) {
+            long total = h.length;
             byte[] buf = new byte[64 * 1024];
             long done = 0;
             int n;
-            while ((n = in.read(buf)) > 0) {
+            while ((n = h.in.read(buf)) > 0) {
                 o.write(buf, 0, n);
                 done += n;
                 if (total > 0) progress = (int) Math.min(100, done * 100 / total);
             }
-        } finally {
-            h.disconnect();
+            if (total > 0 && done != total) throw new Exception("файл скачан не полностью");
         }
         if (out.length() < 1_000_000) throw new Exception("файл слишком мал");
     }

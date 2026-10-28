@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 B=build/test
 rm -rf $B && mkdir -p $B
 javac -nowarn -encoding UTF-8 --release 8 -Xlint:-options -d $B \
-  src/app/dash/{SubParser,Server,Json,XrayJson,Speed}.java test/app/dash/{SubParserTest,SpeedTest}.java
+  src/app/dash/{SubParser,Server,Json,XrayJson,Speed,Fetch}.java test/app/dash/{SubParserTest,SpeedTest,FetchTest}.java
 java -cp $B app.dash.SubParserTest testdata/sub-cases.json
 java -cp $B app.dash.SpeedTest
+java -cp $B app.dash.FetchTest
