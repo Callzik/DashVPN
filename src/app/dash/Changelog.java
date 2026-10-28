@@ -65,6 +65,10 @@ public final class Changelog {
         ENTRIES.put(43, new String[]{
                 "Флаг страны показывается в плитке, даже если в названии сервера он стоит не в начале",
         });
+        ENTRIES.put(44, new String[]{
+                "Сервер можно перевести в обычные, в LTE или в обе группы сразу: долгое нажатие на сервере",
+                "Настройки стали проще: без лишних подписей и пояснений",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

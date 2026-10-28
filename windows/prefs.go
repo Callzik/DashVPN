@@ -24,6 +24,7 @@ type PrefsData struct {
 	Names      map[string]string `json:"names"`
 	Pinned     string            `json:"pinned"`
 	Off        []string          `json:"off"`
+	Roles      map[string]string `json:"roles"` // server name -> regular | lte | both, set by the user
 	RuDirect   bool              `json:"ru_direct"`
 	BlockedVPN bool              `json:"blocked_vpn"`
 	SubUpdated int64             `json:"sub_updated"`
@@ -73,6 +74,11 @@ func (p *Prefs) Get() PrefsData {
 		names[k] = v
 	}
 	d.Names = names
+	roles := map[string]string{}
+	for k, v := range p.D.Roles {
+		roles[k] = v
+	}
+	d.Roles = roles
 	return d
 }
 
@@ -82,6 +88,11 @@ func (p *Prefs) OffSet() map[string]bool {
 		set[n] = true
 	}
 	return set
+}
+
+// Arrange applies the user's group choices and turned-off servers to a freshly parsed list.
+func (p *Prefs) Arrange(list []*Server) []*Server {
+	return ApplyOff(ApplyRoles(list, p.Get().Roles), p.OffSet())
 }
 
 func (p *Prefs) AddSub(u string) bool {

@@ -54,7 +54,7 @@ public class SettingsActivity extends Activity {
             "версия обновить установить загрузка apk",
             "лог журнал ошибки диагностика скопировать поддержка",
             "уведомление остров живые уведомления live update строка состояния samsung самсунг"};
-    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_SHARE}, {P_HOME, P_ISLAND}, {P_SERVERS, P_UPDATE, P_LOG}};
+    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_SHARE}, {P_HOME, P_ISLAND}, {P_UPDATE, P_LOG}};
     private static final String[] GROUP_NAMES = {"Подключение", "Внешний вид", "О приложении"};
 
     private ScrollView scroll;
@@ -131,6 +131,7 @@ public class SettingsActivity extends Activity {
         }
         List<Integer> hits = new ArrayList<>();
         for (int i = 0; i < TITLES.length; i++) {
+            if (i == P_SERVERS) continue; // groups are set on the servers screen now
             String hay = (TITLES[i] + " " + subtitle(i) + " " + KEYS[i]).toLowerCase();
             boolean all = true;
             for (String w : q.split("\\s+")) if (!hay.contains(w)) { all = false; break; }
@@ -311,8 +312,8 @@ public class SettingsActivity extends Activity {
 
     private View menuRow(Context c, final int id, boolean big) {
         LinearLayout row = Ui.row(c);
-        row.setPadding(Ui.dp(c, 14), Ui.dp(c, big ? 18 : 12), Ui.dp(c, 12), Ui.dp(c, big ? 18 : 12));
-        row.setMinimumHeight(Ui.dp(c, big ? 76 : 64));
+        row.setPadding(Ui.dp(c, 14), Ui.dp(c, big ? 14 : 10), Ui.dp(c, 12), Ui.dp(c, big ? 14 : 10));
+        row.setMinimumHeight(Ui.dp(c, big ? 68 : 58));
         row.setBackground(ripple(c));
         row.setClickable(true);
         row.setFocusable(true);
@@ -332,11 +333,12 @@ public class SettingsActivity extends Activity {
         title.setSingleLine(true);
         text.addView(title);
         String subText = subtitle(id);
-        boolean news = id == P_UPDATE && !Updater.newVersion.isEmpty();
-        TextView sub = Ui.text(c, subText, 13, news ? Ui.ACCENT : Ui.MUTED, false);
-        sub.setSingleLine(true);
-        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        text.addView(sub, Ui.lp(c, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 2));
+        // only news gets a second line: the menu is names and icons
+        if (id == P_UPDATE && !Updater.newVersion.isEmpty()) {
+            TextView sub = Ui.text(c, subText, 13, Ui.ACCENT, false);
+            sub.setSingleLine(true);
+            text.addView(sub, Ui.lp(c, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 2));
+        }
         row.addView(text, Ui.weight());
 
         row.addView(new IconView(c, IconView.CHEVRON, 0xFF6F6B82), new LinearLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18)));
@@ -362,7 +364,7 @@ public class SettingsActivity extends Activity {
         subInput = new EditText(c);
         subInput.setTextColor(Ui.FG);
         subInput.setHintTextColor(0xFF8E8AA3);
-        subInput.setHint("Ещё одна ссылка: https://… или vless://…");
+        subInput.setHint("Ссылка на подписку");
         subInput.setTypeface(Typeface.MONOSPACE);
         subInput.setTextSize(13);
         subInput.setMaxLines(3);
@@ -407,11 +409,9 @@ public class SettingsActivity extends Activity {
 
         long upd = prefs.subUpdated();
         String info = upd == 0 ? "Ещё не загружались" : "Загружены " + android.text.format.DateFormat.format("dd.MM HH:mm", upd);
-        if (!AppState.lastServers.isEmpty()) info += "\n" + AppState.lastServers;
-        info += "\nСерверы всех подписок объединяются, автовыбор берёт лучший из всех. Пока VPN включён, подписки обновляются сами раз в 12 часов";
         TextView subInfo = Ui.text(c, info, 13, Ui.MUTED, false);
         sub.addView(subInfo, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
-        TextView save = Ui.button(c, "Обновить и переподключить", false);
+        TextView save = Ui.button(c, "Обновить", false);
         save.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 prefs.resetSubUpdated();
@@ -424,7 +424,6 @@ public class SettingsActivity extends Activity {
 
     private void pageAuto(Context c, LinearLayout col) {
         LinearLayout auto = Ui.card(c);
-        auto.addView(Ui.text(c, "Как выбирать серверы", 15, Ui.FG, true));
         LinearLayout seg = Ui.row(c);
         seg.setBackground(Ui.round(c, Ui.SURFACE2, 12, 0));
         seg.setPadding(Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4));
@@ -438,32 +437,28 @@ public class SettingsActivity extends Activity {
         modeNet.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { setMode(Prefs.MODE_NET); }
         });
-        auto.addView(seg, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
+        auto.addView(seg);
         modeHint = Ui.text(c, "", 13, Ui.MUTED, false);
         auto.addView(modeHint, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
-        auto.addView(Ui.divider(c));
-        auto.addView(Ui.text(c, "Белые списки проверяются раз в 2 минуты и при смене сети: если Google и Cloudflare не открываются, а Госуслуги и ya.ru открываются — списки включены.", 13, Ui.MUTED, false));
         col.addView(auto, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
         renderMode();
     }
 
     private void pageRouting(Context c, LinearLayout col) {
         LinearLayout rt = Ui.card(c);
-        rt.addView(switchRow(c, "Российские сайты без VPN", ".ru, .рф, .su и российские сервисы", prefs.ruDirect(), new Toggle() {
+        rt.addView(switchRow(c, "Российские сайты без VPN", null, prefs.ruDirect(), new Toggle() {
             @Override public void set(boolean v) { prefs.ruDirect(v); }
         }));
         rt.addView(Ui.divider(c));
-        rt.addView(switchRow(c, "Заблокированные в РФ — через VPN", "Даже если сайт на .ru", prefs.blockedVpn(), new Toggle() {
+        rt.addView(switchRow(c, "Заблокированные в РФ — через VPN", null, prefs.blockedVpn(), new Toggle() {
             @Override public void set(boolean v) { prefs.blockedVpn(v); }
         }));
-        rt.addView(Ui.divider(c));
-        rt.addView(Ui.text(c, "Изменения применятся после переподключения.", 13, Ui.MUTED, false));
         col.addView(rt, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
     }
 
     private void pageShare(Context c, LinearLayout col) {
         LinearLayout sh = Ui.card(c);
-        sh.addView(switchRow(c, "VPN для точки доступа", "Прокси для устройств, подключённых к телефону", prefs.shareProxy(), new Toggle() {
+        sh.addView(switchRow(c, "VPN для точки доступа", null, prefs.shareProxy(), new Toggle() {
             @Override public void set(boolean v) {
                 prefs.shareProxy(v);
                 renderShare();
@@ -529,13 +524,10 @@ public class SettingsActivity extends Activity {
 
     private void pageIsland(Context c, LinearLayout col) {
         LinearLayout card = Ui.card(c);
-        card.addView(Ui.text(c, "Пока VPN включён, Dash просит систему показывать его уведомление как живое: "
-                + "таблеткой в строке состояния и в Now Bar на Samsung. Если его там нет, разрешите живые "
-                + "уведомления для Dash в настройках телефона.", 13, Ui.FG, false));
-        islandStatus = Ui.text(c, LiveUpdate.status(c, BoxVpnService.NOTIFY_ID), 12, Ui.MUTED, false);
-        card.addView(islandStatus, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
+        islandStatus = Ui.text(c, LiveUpdate.status(c, BoxVpnService.NOTIFY_ID), 13, Ui.MUTED, false);
+        card.addView(islandStatus);
         col.addView(card, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
-        TextView open = Ui.button(c, "Открыть настройки уведомлений", false);
+        TextView open = Ui.button(c, "Настройки уведомлений", false);
         open.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { LiveUpdate.openSettings(SettingsActivity.this); }
         });
@@ -609,7 +601,7 @@ public class SettingsActivity extends Activity {
         if (entries.isEmpty()) return "Подписка ещё не загружалась. Подключитесь один раз.";
         List<String> warnings = new ArrayList<>();
         List<String> stubs = new ArrayList<>();
-        List<Server> list = Subs.applyOff(Subs.merge(entries, warnings, stubs), prefs.offServers());
+        List<Server> list = Subs.arrange(Subs.merge(entries, warnings, stubs), prefs);
         for (String st : stubs) warnings.add("заглушка вместо серверов — " + st);
         StringBuilder sb = new StringBuilder();
         String[] titles = {"Обычные", "LTE (для белых списков)", "Не участвуют"};
@@ -719,7 +711,8 @@ public class SettingsActivity extends Activity {
         LinearLayout text = new LinearLayout(c);
         text.setOrientation(LinearLayout.VERTICAL);
         text.addView(Ui.text(c, title, 15, Ui.FG, true));
-        text.addView(Ui.text(c, sub, 13, Ui.MUTED, false));
+        if (sub != null) text.addView(Ui.text(c, sub, 13, Ui.MUTED, false));
+        row.setMinimumHeight(Ui.dp(c, 44));
         row.addView(text, Ui.weight());
         Switch sw = new Switch(c);
         sw.setChecked(value);
@@ -754,9 +747,7 @@ public class SettingsActivity extends Activity {
         modeNet.setBackground(!wl ? Ui.round(this, Ui.SURFACE, 9, Ui.LINE2) : null);
         modeWl.setTextColor(wl ? Ui.FG : Ui.MUTED);
         modeNet.setTextColor(!wl ? Ui.FG : Ui.MUTED);
-        modeHint.setText(wl
-                ? "Белые списки включены — LTE, выключены — обычные. Тип сети не важен. Если группа не отвечает, берётся другая."
-                : "Wi-Fi — обычные, мобильная сеть — LTE. Если группа не отвечает, берётся другая.");
+        modeHint.setText(wl ? "Белые списки → LTE" : "Мобильная сеть → LTE, Wi-Fi → обычные");
     }
 
     private void reconnect() {

@@ -42,9 +42,10 @@ func BuildSingBox(servers []*Server, opt BuildOptions) (string, error) {
 			continue
 		}
 		serverOutbounds = append(serverOutbounds, s.Outbound)
-		if s.Group == GroupLTE {
+		if s.Group == GroupLTE || s.Both {
 			lte = append(lte, s.Tag)
-		} else {
+		}
+		if s.Group != GroupLTE {
 			regular = append(regular, s.Tag)
 		}
 	}
@@ -213,6 +214,24 @@ func MergeSubs(entries []SubEntry, warnings, stubs *[]string) []*Server {
 		s.Outbound["tag"] = s.Tag
 	}
 	return out
+}
+
+// ApplyRoles moves servers to the group the user chose: regular, LTE or both.
+func ApplyRoles(list []*Server, roles map[string]string) []*Server {
+	for _, s := range list {
+		switch roles[s.Name] {
+		case "regular":
+			s.Group, s.Both = GroupRegular, false
+		case "lte":
+			s.Group, s.Both = GroupLTE, false
+		case "both":
+			s.Group, s.Both = GroupRegular, true
+		default:
+			continue
+		}
+		s.ExcludeReason = ""
+	}
+	return list
 }
 
 // ApplyOff marks servers the user turned off: listed, but left out of the core.

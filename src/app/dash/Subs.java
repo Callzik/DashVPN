@@ -47,6 +47,25 @@ public final class Subs {
         return out;
     }
 
+    /** The user's group choices and turned-off servers, applied to a freshly parsed list. */
+    public static List<Server> arrange(List<Server> list, Prefs prefs) {
+        return applyOff(applyRoles(list, prefs.serverRoles()), prefs.offServers());
+    }
+
+    /** Moves servers to the group the user chose: regular, LTE or both. */
+    public static List<Server> applyRoles(List<Server> list, java.util.Map<String, String> roles) {
+        for (Server s : list) {
+            String r = roles.get(s.name);
+            if (r == null) continue;
+            if (r.equals("regular")) { s.group = Server.REGULAR; s.both = false; }
+            else if (r.equals("lte")) { s.group = Server.LTE; s.both = false; }
+            else if (r.equals("both")) { s.group = Server.REGULAR; s.both = true; }
+            else continue;
+            s.excludeReason = null;
+        }
+        return list;
+    }
+
     /** Marks servers the user turned off: they stay listed but get no place in the core. */
     public static List<Server> applyOff(List<Server> list, java.util.Set<String> off) {
         for (Server s : list) {

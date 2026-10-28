@@ -101,6 +101,8 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 .menu{position:fixed;background:var(--surface2);border:1px solid var(--line2);border-radius:12px;padding:4px;display:none;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .menu button{display:block;width:100%;text-align:left;padding:8px 14px;border-radius:8px;font-size:14px}
 .menu button:hover{background:var(--line)}
+.mck{display:inline-block;width:18px;color:var(--accent);font-weight:700}
+.msep{height:1px;background:var(--line2);margin:4px 6px}
 /* servers: flag, name, ping; a check marks the chosen one, a dot the one in use */
 .srow{min-height:58px}
 .srow .flag{width:36px;height:36px;border-radius:11px;background:var(--surface2);display:grid;place-items:center;flex:none;font-size:21px;line-height:1}
@@ -122,10 +124,10 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 /* settings menu */
 .mgroup{background:var(--surface);border:1px solid var(--line);border-radius:20px;overflow:hidden}
 .hero-card{background:linear-gradient(135deg,var(--accent-tint),var(--surface));border-color:var(--line2)}
-.mrow{position:relative;display:flex;align-items:center;gap:14px;padding:12px 12px 12px 14px;min-height:64px;cursor:pointer}
+.mrow{position:relative;display:flex;align-items:center;gap:14px;padding:10px 12px 10px 14px;min-height:58px;cursor:pointer}
 .mrow:hover{background:rgba(255,255,255,.03)}
 .mrow+.mrow::before{content:"";position:absolute;left:70px;right:0;top:0;height:1px;background:var(--line)}
-.mrow.big{padding:18px 12px 18px 14px;min-height:76px}
+.mrow.big{padding:14px 12px 14px 14px;min-height:68px}
 .mic{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;flex:none}
 .mic svg{width:22px;height:22px}
 .mrow.big .mic{width:46px;height:46px;border-radius:15px}.mrow.big .mic svg{width:26px;height:26px}
@@ -196,8 +198,7 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
       <input id="setsearch" placeholder="Поиск настроек" oninput="query=this.value;renderMenu()" onkeydown="if(event.key==='Escape'&&this.value){event.stopPropagation();clearSearch()}">
       <button class="x" id="setclear" style="display:none" title="Очистить" onclick="clearSearch()">✕</button></label>
     <div id="menubody"></div>
-    <div class="card" style="margin-top:22px"><div class="m">Dash для Windows · ядра sing-box и Xray-core · создано с помощью Claude.<br>Весь трафик ПК идёт через VPN-адаптер, российские сайты — напрямую. Упавшее ядро перезапускается само, после сна соединение проверяется заново.</div>
-      <button class="secondary" style="width:100%;margin-top:12px;color:var(--bad)" onclick="api('/api/quit')">Отключить VPN и выйти</button></div>
+    <button class="secondary" style="width:100%;margin-top:22px;color:var(--bad)" onclick="api('/api/quit')">Выйти из Dash</button>
   </div>
 </section>
 
@@ -208,29 +209,29 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
     <div class="page" data-page="subs">
       <div class="card">
         <div id="sublist"></div>
-        <input class="field" id="subinput" placeholder="Ещё одна ссылка: https://… или vless://…" style="margin-top:12px" onkeydown="if(event.key==='Enter')addSub('subinput')">
+        <input class="field" id="subinput" placeholder="Ссылка на подписку" style="margin-top:12px" onkeydown="if(event.key==='Enter')addSub('subinput')">
         <div class="row" style="margin-top:10px">
           <button class="secondary grow" onclick="pasteInto('subinput')">Вставить</button>
           <button class="secondary grow" style="color:var(--accent)" onclick="addSub('subinput')">Добавить</button>
         </div>
         <div class="m" id="subinfo" style="margin-top:12px"></div>
       </div>
-      <button class="secondary" style="width:100%;margin-top:12px" onclick="refreshSubs()">Обновить подписки</button>
+      <button class="secondary" style="width:100%;margin-top:12px" onclick="refreshSubs()">Обновить</button>
     </div>
 
     <div class="page" data-page="start">
       <div class="card">
-        <div class="row"><div class="grow"><div class="b">Запускать вместе с Windows</div><div class="m">Dash стартует в трее при входе в систему</div></div><div class="switch" id="sw-ar" onclick="setAutorun(this)"></div></div>
+        <div class="row"><div class="grow"><div class="b">Запускать вместе с Windows</div></div><div class="switch" id="sw-ar" onclick="setAutorun(this)"></div></div>
         <div class="sep"></div>
-        <div class="row"><div class="grow"><div class="b">Подключаться при запуске</div><div class="m">VPN включается сам, без нажатия кнопки</div></div><div class="switch" id="sw-as" onclick="setAuto(this)"></div></div>
+        <div class="row"><div class="grow"><div class="b">Подключаться при запуске</div></div><div class="switch" id="sw-as" onclick="setAuto(this)"></div></div>
       </div>
     </div>
 
     <div class="page" data-page="route">
       <div class="card">
-        <div class="row"><div class="grow"><div class="b">Российские сайты напрямую</div><div class="m">Без VPN: банки, Госуслуги, маркетплейсы</div></div><div class="switch" id="sw-ru" onclick="setOpt('ruDirect',this)"></div></div>
+        <div class="row"><div class="grow"><div class="b">Российские сайты напрямую</div></div><div class="switch" id="sw-ru" onclick="setOpt('ruDirect',this)"></div></div>
         <div class="sep"></div>
-        <div class="row"><div class="grow"><div class="b">Заблокированное в РФ — через VPN</div><div class="m">Даже если сайт в зоне .ru</div></div><div class="switch" id="sw-bl" onclick="setOpt('blockedVpn',this)"></div></div>
+        <div class="row"><div class="grow"><div class="b">Заблокированное в РФ — через VPN</div></div><div class="switch" id="sw-bl" onclick="setOpt('blockedVpn',this)"></div></div>
       </div>
     </div>
 
@@ -239,13 +240,11 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
         <div class="row"><div class="grow"><div class="b" id="ver3">Dash</div><div class="m" id="updstate">Обновления проверяются сами</div></div>
           <button class="secondary" id="updbtn2" onclick="updAction()">Проверить</button></div>
       </div>
-      <div class="m" style="margin:12px 4px 0">Dash ставит только обновления с цифровой подписью разработчика.</div>
-    </div>
+          </div>
 
     <div class="page" data-page="log">
       <div class="card">
-        <div class="b">События подключения</div><div class="m">Пригодится, если что-то не работает</div>
-        <div class="row" style="margin-top:12px">
+        <div class="row">
           <button class="secondary grow" id="logbtn" onclick="toggleLog()">Показать</button>
           <button class="secondary grow" onclick="copyLog()">Скопировать</button></div>
         <pre class="log" id="log" style="display:none;margin-top:12px;max-height:420px;overflow:auto"></pre>
@@ -257,8 +256,7 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 <!-- apps without VPN -->
 <section class="view" id="v-apps">
   <div class="top"><button class="back" onclick="leaveApps()">←</button><h1>Приложения без VPN</h1></div>
-  <div class="m" style="margin-top:10px">Трафик отмеченных программ идёт напрямую, мимо VPN. Список — запущенные сейчас программы; если нужной нет, запустите её или впишите имя файла.</div>
-  <input class="field" id="appsearch" placeholder="Поиск или имя программы, например game.exe" style="margin-top:12px" oninput="renderApps()" onkeydown="if(event.key==='Enter')addManual()">
+    <input class="field" id="appsearch" placeholder="Поиск или game.exe" style="margin-top:12px" oninput="renderApps()" onkeydown="if(event.key==='Enter')addManual()">
   <div class="scroll" id="applist"></div>
 </section>
 
@@ -356,7 +354,7 @@ function srow(s,pinned){
   const sel=pinned===s.name,now=!pinned&&S.state==='on'&&S.server===s.name;
   const tile=flag?`<div class="flag">${flag}</div>`:`<div class="flag txt">${esc((title.trim()[0]||'?').toUpperCase())}</div>`;
   const tip=[s.xhttp?'xhttp':'',s.sub].filter(Boolean).join(' · ');
-  return `<div class="mrow srow${sel?' sel':''}${s.off?' off':''}" data-name="${esc(s.name)}" data-off="${s.off}"${tip?` title="${esc(tip)}"`:''}>${tile}
+  return `<div class="mrow srow${sel?' sel':''}${s.off?' off':''}" data-name="${esc(s.name)}" data-off="${s.off}" data-group="${s.group}"${tip?` title="${esc(tip)}"`:''}>${tile}
     <div class="grow b ell">${esc(title)}</div>${now?'<span class="live" title="Используется сейчас"></span>':''}${s.off?'':pingPill(s.ping)}${sel?TICK:''}</div>`}
 async function loadServers(){
   const r=await api('/api/servers');const list=r.servers||[];const pinned=r.pinned||'';
@@ -368,7 +366,8 @@ async function loadServers(){
   const q=srvQuery.trim().toLowerCase();
   const hit=s=>!q||q.split(/\s+/).every(w=>(s.name+' '+s.sub+(s.xhttp?' xhttp':'')+(s.group==='lte'?' lte':'')).toLowerCase().includes(w));
   const shown=list.filter(hit);
-  const groups=[['',shown.filter(s=>!s.off&&s.group!=='lte')],['LTE',shown.filter(s=>!s.off&&s.group==='lte')],['Отключены',shown.filter(s=>s.off)]];
+  // a server set to "both" is listed in both groups
+  const groups=[['',shown.filter(s=>!s.off&&s.group!=='lte')],['LTE',shown.filter(s=>!s.off&&s.group!=='regular')],['Отключены',shown.filter(s=>s.off)]];
   let h='';
   for(const [name,items] of groups)if(items.length)
     h+=(name?`<div class="glabel">${name}</div>`:'<div style="height:12px"></div>')+`<div class="mgroup">${items.map(s=>srow(s,pinned)).join('')}</div>`;
@@ -377,15 +376,21 @@ async function loadServers(){
   box.querySelectorAll('.srow[data-name]').forEach(el=>{
     const name=el.dataset.name,off=el.dataset.off==='true';
     el.onclick=()=>off?toast('Сервер отключён. Правый клик — включить'):pin(name);
-    el.oncontextmenu=e=>{e.preventDefault();openMenu(e.clientX,e.clientY,off?'Включить сервер':'Отключить сервер',async()=>{
-      await api('/api/off',{name,off:!off});offChanged=true;loadServers();})};
+    el.oncontextmenu=e=>{e.preventDefault();const g=el.dataset.group;
+      const role=r=>async()=>{await api('/api/role',{name,role:r});offChanged=true;loadServers()};
+      openMenu(e.clientX,e.clientY,[['Обычный',role('regular'),g==='regular'],['LTE',role('lte'),g==='lte'],['Оба',role('both'),g==='both'],null,
+        [off?'Включить':'Отключить',async()=>{await api('/api/off',{name,off:!off});offChanged=true;loadServers()}]])};
   });
 }
 function clearSrvSearch(){$('srvsearch').value='';srvQuery='';loadServers()}
 async function pin(name){await api('/api/pin',{name});toast(name?'Выбран: '+name:'Автовыбор');setTimeout(poll,600);loadServers()}
 function leaveServers(){show('main');if(offChanged&&S.state!=='off'){api('/api/apply');toast('Переподключение для применения')}offChanged=false}
-function openMenu(x,y,label,fn){const m=$('menu');m.innerHTML=`<button>${label}</button>`;m.firstChild.onclick=()=>{m.style.display='none';fn()};
-  m.style.display='block';m.style.left=Math.min(x,innerWidth-200)+'px';m.style.top=Math.min(y,innerHeight-60)+'px'}
+// items: [label, fn, checked?]; null draws a separator
+function openMenu(x,y,items){const m=$('menu');m.innerHTML='';
+  for(const it of items){if(!it){m.insertAdjacentHTML('beforeend','<div class="msep"></div>');continue}
+    const b=document.createElement('button');b.innerHTML=`<span class="mck">${it[2]?'✓':''}</span>${esc(it[0])}`;
+    b.onclick=e=>{e.stopPropagation();m.style.display='none';it[1]()};m.appendChild(b)}
+  m.style.display='block';m.style.left=Math.min(x,innerWidth-200)+'px';m.style.top=Math.min(y,innerHeight-m.offsetHeight-8)+'px'}
 document.addEventListener('click',()=>$('menu').style.display='none');
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('.srow'))e.preventDefault()});
 
@@ -399,8 +404,7 @@ async function loadSettings(){
     if(!confirmBox('Удалить подписку?'))return;
     await api('/api/subs/remove',{url:b.dataset.url});loadSettings()});
   const upd=r.updated?new Date(r.updated*1000):null;
-  $('subinfo').textContent=(upd?'Обновлены '+upd.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'Ещё не загружались')
-    +(r.summary?' · '+r.summary:'')+'\nПока VPN включён, обновляются сами раз в 12 часов.';
+  $('subinfo').textContent=(upd?'Обновлены '+upd.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'Ещё не загружались');
   $('subinfo').style.whiteSpace='pre-line';
   $('sw-ru').classList.toggle('on',!!r.ruDirect);$('sw-bl').classList.toggle('on',!!r.blockedVpn);
   $('sw-as').classList.toggle('on',!!r.autoStart);$('sw-ar').classList.toggle('on',!!r.autorun);
@@ -441,7 +445,7 @@ function subText(id){
 }
 function mrow(id,big){const p=PAGES[id],news=id==='update'&&!!UPD.version;
   return `<div class="mrow${big?' big':''}" onclick="openPage('${id}')"><div class="mic" style="background:${p.c}26"><svg viewBox="0 0 24 24" fill="none" stroke="${p.c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[id]}</svg></div>
-    <div class="grow"><div class="b ell">${p.t}</div><div class="sub ell${news?' news':''}">${esc(subText(id))}</div></div>
+    <div class="grow"><div class="b ell">${p.t}</div>${news?`<div class="sub ell news">${esc(subText(id))}</div>`:''}</div>
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6F6B82" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></div>`}
 function menuKey(){return JSON.stringify([SET,UPD.version||'',S.version||'',query])}
 function renderMenu(){

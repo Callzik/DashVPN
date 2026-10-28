@@ -46,6 +46,8 @@ public class ServersActivity extends Activity {
         prefs = new Prefs(this);
         off = prefs.offServers();
         offAtStart = new java.util.HashSet<>(off);
+        roles = prefs.serverRoles();
+        rolesAtStart = new java.util.HashMap<>(roles);
         getWindow().setStatusBarColor(Ui.BG);
         getWindow().setNavigationBarColor(Ui.BG);
         Context c = this;
@@ -130,32 +132,55 @@ public class ServersActivity extends Activity {
         return off.contains(s.name);
     }
 
-    private void toggleOff(final Server s) {
+    private java.util.Map<String, String> roles;
+    private java.util.Map<String, String> rolesAtStart;
+
+    /** regular, lte or both: the user's choice, else what the subscription name says. */
+    private String role(Server s) {
+        String r = roles.get(s.name);
+        if (r != null) return r;
+        return s.origGroup == Server.LTE ? "lte" : s.both ? "both" : "regular";
+    }
+
+    /** Long press: which group the server goes to, or turn it off. */
+    private void serverMenu(final Server s) {
+        final String[] keys = {"regular", "lte", "both"};
+        String cur = role(s);
         final boolean nowOff = isOff(s);
+        String[] items = {mark(cur, "regular") + "Обычный", mark(cur, "lte") + "LTE", mark(cur, "both") + "Оба",
+                nowOff ? "Включить" : "Отключить"};
         new android.app.AlertDialog.Builder(this)
                 .setTitle(s.name)
-                .setMessage(nowOff ? "Включить сервер обратно?" : "Отключить сервер? Он не будет участвовать в автовыборе, пока вы его не включите.")
-                .setPositiveButton(nowOff ? "Включить" : "Отключить", new android.content.DialogInterface.OnClickListener() {
+                .setItems(items, new android.content.DialogInterface.OnClickListener() {
                     @Override public void onClick(android.content.DialogInterface d, int w) {
-                        if (nowOff) off.remove(s.name); else off.add(s.name);
-                        prefs.offServers(off);
-                        if (!nowOff && s.name.equals(prefs.pinned())) {
-                            prefs.pinned("");
-                            AppState.pinned = "";
+                        if (w < 3) {
+                            roles.put(s.name, keys[w]);
+                            prefs.serverRole(s.name, keys[w]);
+                        } else {
+                            if (nowOff) off.remove(s.name); else off.add(s.name);
+                            prefs.offServers(off);
+                            if (!nowOff && s.name.equals(prefs.pinned())) {
+                                prefs.pinned("");
+                                AppState.pinned = "";
+                            }
                         }
                         update();
                     }
                 })
-                .setNegativeButton("Отмена", null)
                 .show();
+    }
+
+    private static String mark(String cur, String key) {
+        return cur.equals(key) ? "✓  " : "     ";
     }
 
     @Override
     protected void onStop() {
         super.onStop();
         // turning servers on/off changes the core config: reconnect once when leaving the screen
-        if (isFinishing() && off != null && !off.equals(offAtStart) && AppState.vpn != AppState.OFF) {
+        if (isFinishing() && off != null && (!off.equals(offAtStart) || !roles.equals(rolesAtStart)) && AppState.vpn != AppState.OFF) {
             offAtStart = new java.util.HashSet<>(off);
+            rolesAtStart = new java.util.HashMap<>(roles);
             AppState.servers = new ArrayList<>();
             final Context app = getApplicationContext();
             VpnControl.stop(app);
@@ -186,7 +211,7 @@ public class ServersActivity extends Activity {
         List<Server> src = AppState.servers;
         if (src == null || src.isEmpty()) {
             try {
-                src = Subs.applyOff(Subs.merge(Subs.cached(prefs), new ArrayList<String>(), new ArrayList<String>()), prefs.offServers());
+                src = Subs.arrange(Subs.merge(Subs.cached(prefs), new ArrayList<String>(), new ArrayList<String>()), prefs);
             } catch (Exception e) {
                 src = new ArrayList<>();
             }
@@ -226,9 +251,13 @@ public class ServersActivity extends Activity {
         List<Server> main = new ArrayList<>(), lte = new ArrayList<>(), offList = new ArrayList<>();
         for (Server s : items) {
             if (!matches(s, q)) continue;
+            String r = role(s);
             if (isOff(s)) offList.add(s);
-            else if (s.origGroup == Server.LTE) lte.add(s);
-            else main.add(s);
+            else {
+                // a server set to "both" is listed in both groups
+                if (!r.equals("lte")) main.add(s);
+                if (!r.equals("regular")) lte.add(s);
+            }
         }
         body.removeAllViews();
         String now = pinned.isEmpty() && on ? AppState.serverName : "";
@@ -245,7 +274,7 @@ public class ServersActivity extends Activity {
 
     private static boolean matches(Server s, String q) {
         if (q.isEmpty()) return true;
-        String hay = (s.name + " " + s.sub + (s.xray != null ? " xhttp" : "") + (s.origGroup == Server.LTE ? " lte" : "")).toLowerCase();
+        String hay = (s.name + " " + s.sub + (s.xray != null ? " xhttp" : "") + (s.origGroup == Server.LTE || s.both ? " lte" : "")).toLowerCase();
         for (String w : q.split("\\s+")) if (!hay.contains(w)) return false;
         return true;
     }
@@ -339,7 +368,7 @@ public class ServersActivity extends Activity {
         if (s != null) {
             row.setOnLongClickListener(new View.OnLongClickListener() {
                 @Override public boolean onLongClick(View v) {
-                    toggleOff(s);
+                    serverMenu(s);
                     return true;
                 }
             });

@@ -17,6 +17,8 @@ public final class Server {
     /** Turned off by the user: kept in the list, left out of the core. {@link #group} is then EXCLUDED. */
     public boolean off;
     public int origGroup;
+    /** The user put this server into the LTE group too; {@link #group} is then REGULAR. */
+    public boolean both;
     public String excludeReason;
     public Map<String, Object> outbound;
     /** Real server address (outbound may point at the local Xray). */

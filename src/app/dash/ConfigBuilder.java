@@ -45,7 +45,8 @@ public final class ConfigBuilder {
         for (Server s : servers) {
             if (s.group == Server.EXCLUDED) continue;
             serverOutbounds.add(s.outbound);
-            (s.group == Server.LTE ? lte : regular).add(s.tag);
+            if (s.group == Server.LTE || s.both) lte.add(s.tag);
+            if (s.group != Server.LTE) regular.add(s.tag);
         }
         if (regular.isEmpty() && lte.isEmpty()) throw new IllegalStateException("В подписке нет подходящих серверов");
 

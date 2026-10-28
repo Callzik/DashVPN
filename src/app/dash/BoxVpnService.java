@@ -264,7 +264,7 @@ public class BoxVpnService extends VpnService {
         if (!running) return;
         List<String> warnings = new ArrayList<>();
         List<String> stubs = new ArrayList<>();
-        List<Server> merged = Subs.applyOff(Subs.merge(entries, warnings, stubs), prefs.offServers());
+        List<Server> merged = Subs.arrange(Subs.merge(entries, warnings, stubs), prefs);
         for (String st : stubs) AppState.log("Вместо серверов заглушка — " + st);
         int usable = 0;
         for (Server s : merged) if (s.group != Server.EXCLUDED) usable++;
@@ -407,7 +407,7 @@ public class BoxVpnService extends VpnService {
         for (String w : warnings) AppState.log(w);
         int reg = 0, lte = 0, ex = 0;
         for (Server s : parsed) {
-            if (s.group == Server.REGULAR) reg++;
+            if (s.group == Server.REGULAR) { reg++; if (s.both) lte++; }
             else if (s.group == Server.LTE) lte++;
             else ex++;
         }
@@ -1050,7 +1050,7 @@ public class BoxVpnService extends VpnService {
         List<Subs.Entry> entries = loadSubs(urls);
         if (!running) return;
         List<String> warnings = new ArrayList<>();
-        List<Server> fresh = Subs.applyOff(Subs.merge(entries, warnings, new ArrayList<String>()), prefs.offServers());
+        List<Server> fresh = Subs.arrange(Subs.merge(entries, warnings, new ArrayList<String>()), prefs);
         if (fresh.isEmpty()) {
             AppState.log("Автообновление: подписки не скачались, повтор позже");
             return;
@@ -1189,7 +1189,7 @@ public class BoxVpnService extends VpnService {
     private int countGroup(String g) {
         int want = ConfigBuilder.GROUP_LTE.equals(g) ? Server.LTE : Server.REGULAR;
         int n = 0;
-        for (Server s : servers) if (s.group == want) n++;
+        for (Server s : servers) if (s.group == want || want == Server.LTE && s.both && s.group == Server.REGULAR) n++;
         return n;
     }
 
