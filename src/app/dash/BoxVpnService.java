@@ -1353,6 +1353,13 @@ public class BoxVpnService extends VpnService {
 
     /* ---------- core process ---------- */
 
+    private static final int CRASH_KEEP = 60;
+
+    private static boolean isCrashStart(String l) {
+        return l.startsWith("panic: ") || l.startsWith("fatal error: ") || l.startsWith("runtime: ")
+                || l.startsWith("SIG") || l.startsWith("unexpected fault");
+    }
+
     private void startHelper(File cfg) throws Exception {
         String bin = getApplicationInfo().nativeLibraryDir + "/libsbhelper.so";
         File work = new File(getFilesDir(), "core");
@@ -1367,11 +1374,21 @@ public class BoxVpnService extends VpnService {
         final InputStream out = proc.getInputStream();
         new Thread(new Runnable() {
             @Override public void run() {
+                int skipped = 0;
                 try {
                     BufferedReader r = new BufferedReader(new InputStreamReader(out, "UTF-8"));
                     String line;
+                    // A Go crash dumps every goroutine (thousands of lines) and would push its own
+                    // first lines, the actual cause, out of the 400-line journal. Keep only the head.
+                    int crashLines = -1;
                     while ((line = r.readLine()) != null) {
                         String l = stripAnsi(line);
+                        if (crashLines < 0 && isCrashStart(l)) crashLines = 0;
+                        if (crashLines >= 0) {
+                            if (crashLines++ < CRASH_KEEP) AppState.log(l);
+                            else skipped++;
+                            continue;
+                        }
                         // keep URL-test results and problems, drop per-connection noise
                         if (l.startsWith("DEBUG") && !l.contains("unavailable") && !l.contains("available:")) continue;
                         if (l.contains("inbound connection") || l.contains("outbound connection")
@@ -1380,6 +1397,7 @@ public class BoxVpnService extends VpnService {
                     }
                 } catch (Exception ignored) {
                 }
+                if (skipped > 0) AppState.log("… ещё " + skipped + " строк отчёта о сбое скрыто");
                 if (running && !stopping && helper == proc) {
                     AppState.log("Ядро остановилось");
                     fail("Ядро остановилось, подробности в журнале");
