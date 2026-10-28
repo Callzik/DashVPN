@@ -19,11 +19,13 @@ const (
 
 // Server is one server from a subscription, already converted to a sing-box outbound.
 type Server struct {
-	RawName       string
-	Name          string
-	Tag           string
-	Group         int
-	OrigGroup     int
+	RawName   string
+	Name      string
+	Tag       string
+	Group     int
+	OrigGroup int
+	// Both: the user put this server into the LTE group too; Group is then GroupRegular
+	Both          bool
 	Off           bool
 	ExcludeReason string
 	Host          string

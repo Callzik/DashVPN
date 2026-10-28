@@ -131,6 +131,23 @@ public final class Prefs {
         p.edit().putStringSet("off_servers", new java.util.HashSet<>(v)).apply();
     }
 
+    /** Group the user chose per server name: regular, lte or both. Stored as "name\trole". */
+    public java.util.Map<String, String> serverRoles() {
+        java.util.Map<String, String> out = new java.util.HashMap<>();
+        for (String e : p.getStringSet("server_roles", new java.util.HashSet<String>())) {
+            int t = e.lastIndexOf('\t');
+            if (t > 0) out.put(e.substring(0, t), e.substring(t + 1));
+        }
+        return out;
+    }
+    public void serverRole(String name, String role) {
+        java.util.Map<String, String> m = serverRoles();
+        if (role.isEmpty()) m.remove(name); else m.put(name, role);
+        java.util.Set<String> set = new java.util.HashSet<>();
+        for (java.util.Map.Entry<String, String> e : m.entrySet()) set.add(e.getKey() + "\t" + e.getValue());
+        p.edit().putStringSet("server_roles", set).apply();
+    }
+
     /** Name of the server chosen by hand, empty = automatic. */
     public String pinned() { return p.getString("pinned", ""); }
     public void pinned(String v) { p.edit().putString("pinned", v).apply(); }

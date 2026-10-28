@@ -234,7 +234,7 @@ func (c *Core) boot(g int) error {
 		return nil
 	}
 	var warnings, stubs []string
-	merged := ApplyOff(MergeSubs(entries, &warnings, &stubs), c.prefs.OffSet())
+	merged := c.prefs.Arrange(MergeSubs(entries, &warnings, &stubs))
 	for _, s := range stubs {
 		c.log.Add("Вместо серверов заглушка — " + s)
 	}
@@ -426,6 +426,9 @@ func (c *Core) applyServers(list []*Server, warnings []string) {
 		switch s.Group {
 		case GroupRegular:
 			reg++
+			if s.Both {
+				lte++
+			}
 		case GroupLTE:
 			lte++
 		default:
@@ -763,7 +766,7 @@ func (c *Core) countGroup(g string) int {
 	defer c.mu.Unlock()
 	n := 0
 	for _, s := range c.servers {
-		if s.Group == want {
+		if s.Group == want || want == GroupLTE && s.Both && s.Group != GroupExcluded {
 			n++
 		}
 	}
@@ -1232,7 +1235,7 @@ func (c *Core) checkSub(g int) {
 	}
 	entries := c.loadSubs(urls)
 	var warnings, stubs []string
-	fresh := ApplyOff(MergeSubs(entries, &warnings, &stubs), c.prefs.OffSet())
+	fresh := c.prefs.Arrange(MergeSubs(entries, &warnings, &stubs))
 	if len(fresh) == 0 || !c.current(g) {
 		c.log.Add("Автообновление: подписки не скачались, повтор позже")
 		return
@@ -1452,9 +1455,10 @@ func (c *Core) Servers() []ServerView {
 	c.mu.Unlock()
 	if len(list) == 0 {
 		var w, st []string
-		list = ApplyOff(MergeSubs(c.prefs.CachedEntries(), &w, &st), c.prefs.OffSet())
+		list = c.prefs.Arrange(MergeSubs(c.prefs.CachedEntries(), &w, &st))
 	}
 	off := c.prefs.OffSet()
+	roles := c.prefs.Get().Roles
 	var out []ServerView
 	for _, s := range list {
 		if s.Group == GroupExcluded && !s.Off {
@@ -1463,6 +1467,11 @@ func (c *Core) Servers() []ServerView {
 		g := "regular"
 		if s.OrigGroup == GroupLTE {
 			g = "lte"
+		} else if s.Both {
+			g = "both"
+		}
+		if r := roles[s.Name]; r != "" {
+			g = r // chosen while the core runs the old list: show it now, applied on reconnect
 		}
 		out = append(out, ServerView{Name: s.Name, Group: g, Sub: s.Sub, Off: off[s.Name], Ping: pings[s.Tag], Xhttp: s.Xray != nil})
 	}
@@ -1486,6 +1495,20 @@ func (c *Core) Servers() []ServerView {
 		return key(a.Ping) < key(b.Ping)
 	})
 	return out
+}
+
+// SetRole puts a server into the regular group, the LTE group or both ("" = as the subscription says).
+func (c *Core) SetRole(name, role string) {
+	c.prefs.Update(func(d *PrefsData) {
+		if d.Roles == nil {
+			d.Roles = map[string]string{}
+		}
+		if role == "" {
+			delete(d.Roles, name)
+		} else {
+			d.Roles[name] = role
+		}
+	})
 }
 
 func (c *Core) SetOff(name string, off bool) {

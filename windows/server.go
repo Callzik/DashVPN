@@ -98,6 +98,11 @@ func (a *API) handler() http.Handler {
 		a.core.SetOff(str(b["name"]), off)
 		writeJSON(w, true)
 	})
+	api("/api/role", func(w http.ResponseWriter, r *http.Request) {
+		b := body(r)
+		a.core.SetRole(str(b["name"]), str(b["role"]))
+		writeJSON(w, true)
+	})
 	api("/api/apply", func(w http.ResponseWriter, r *http.Request) { a.core.Restart(); writeJSON(w, true) })
 	api("/api/ping-all", func(w http.ResponseWriter, r *http.Request) { a.core.PingAll(); writeJSON(w, true) })
 	api("/api/ping-current", func(w http.ResponseWriter, r *http.Request) { a.core.PingCurrent(); writeJSON(w, true) })
