@@ -386,15 +386,15 @@ public class ServersActivity extends Activity {
         }
     }
 
-    /** Leading flag emoji (two regional indicators) and the rest of the name. */
+    /** The first flag emoji (two regional indicators) anywhere in the name, and the name without it. */
     static String[] splitFlag(String name) {
-        if (name.length() >= 4) {
-            int a = name.codePointAt(0);
-            int b = name.codePointAt(Character.charCount(a));
-            if (isRegional(a) && isRegional(b)) {
-                String rest = name.substring(4).trim();
-                return new String[]{name.substring(0, 4), rest.isEmpty() ? name : rest};
-            }
+        for (int i = 0; i + 4 <= name.length(); i += Character.charCount(name.codePointAt(i))) {
+            int a = name.codePointAt(i);
+            if (!isRegional(a)) continue;
+            int b = name.codePointAt(i + 2);
+            if (!isRegional(b)) continue;
+            String rest = (name.substring(0, i) + " " + name.substring(i + 4)).trim().replaceAll("\\s{2,}", " ");
+            return new String[]{name.substring(i, i + 4), rest.isEmpty() ? name : rest};
         }
         return new String[]{"", name};
     }

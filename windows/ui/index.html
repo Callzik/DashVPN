@@ -339,8 +339,10 @@ async function poll(){
 }
 
 let srvQuery='';
-const FLAG=/^((?:\uD83C[\uDDE6-\uDDFF]){2})\s*/;
-function splitFlag(name){const m=name.match(FLAG);return m?[m[1],name.slice(m[0].length)||name]:['',name]}
+// the first flag anywhere in the name goes to the tile: "🇩🇪 Berlin" and "Albania 🇦🇱 YouTube" alike
+const FLAG=/(?:\uD83C[\uDDE6-\uDDFF]){2}/;
+function splitFlag(name){const m=name.match(FLAG);if(!m)return['',name];
+  const rest=(name.slice(0,m.index)+' '+name.slice(m.index+m[0].length)).replace(/\s+/g,' ').trim();return[m[0],rest||name]}
 // colour keeps the old 300/400 ms thresholds; bars add detail inside the green zone
 function pq(p){return p<=0?0:p<300?3:p<400?2:1}
 function pingPill(p){
