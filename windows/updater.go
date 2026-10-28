@@ -16,7 +16,10 @@ import (
 	"time"
 )
 
-const versionURL = "https://raw.githubusercontent.com/Callzik/DashVPN-by-Claude/main/version.json"
+const versionURL = "https://raw.githubusercontent.com/Callzik/DashVPN/main/version.json"
+
+// versionAPI serves the same files from api.github.com, for providers that block raw.githubusercontent.com.
+const versionAPI = "https://api.github.com/repos/Callzik/DashVPN/contents/version.json"
 
 // Updater checks GitHub for a newer Windows build and swaps Dash.exe in place.
 type Updater struct {
@@ -76,7 +79,15 @@ func newer(a, b string) bool {
 
 // getSmall fetches a small text file (version.json and its signature).
 func getSmall(cl *http.Client, url string) ([]byte, error) {
-	resp, err := cl.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Dash")
+	if strings.HasPrefix(url, "https://api.github.com/") {
+		req.Header.Set("Accept", "application/vnd.github.raw")
+	}
+	resp, err := cl.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +100,17 @@ func getSmall(cl *http.Client, url string) ([]byte, error) {
 
 func (u *Updater) Check() {
 	cl := &http.Client{Timeout: 20 * time.Second}
-	body, err := getSmall(cl, versionURL)
+	base := versionURL
+	body, err := getSmall(cl, base)
+	if err != nil {
+		base = versionAPI
+		body, err = getSmall(cl, base)
+	}
 	if err != nil {
 		u.log.Add("Проверка обновлений: нет связи с GitHub")
 		return
 	}
-	sig, err := getSmall(cl, versionURL+".sig")
+	sig, err := getSmall(cl, base+".sig")
 	if err == nil {
 		err = verifyManifest(body, sig)
 	}
