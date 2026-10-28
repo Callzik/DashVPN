@@ -39,6 +39,9 @@ var changelog = map[string][]string{
 	"1.7.2": {
 		"Запасной адрес проверки обновлений, если провайдер блокирует GitHub",
 	},
+	"1.7.3": {
+		"Флаг страны показывается в плитке, даже если в названии сервера он стоит не в начале",
+	},
 }
 
 // whatsNew lists the entries newer than seen up to the running version, oldest first.

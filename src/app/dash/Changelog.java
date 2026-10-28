@@ -62,6 +62,9 @@ public final class Changelog {
                 "Если проверить обновления не удалось, Dash об этом пишет, а не показывает «последняя версия»",
                 "Если ядро падает, в журнале остаётся причина сбоя, а не только хвост длинного отчёта",
         });
+        ENTRIES.put(43, new String[]{
+                "Флаг страны показывается в плитке, даже если в названии сервера он стоит не в начале",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
