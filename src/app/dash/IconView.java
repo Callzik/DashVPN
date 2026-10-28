@@ -10,7 +10,8 @@ import android.view.View;
 /** Line icons drawn in code on a 24×24 grid, so the APK needs no image resources. */
 final class IconView extends View {
     static final int SUBS = 0, AUTO = 1, ROUTE = 2, SHARE = 3, APPS = 4, HOME = 5, SERVERS = 6,
-            UPDATE = 7, LOG = 8, SEARCH = 9, CHEVRON = 10, BACK = 11, CLEAR = 12, ISLAND = 13;
+            UPDATE = 7, LOG = 8, SEARCH = 9, CHEVRON = 10, BACK = 11, CLEAR = 12, ISLAND = 13,
+            REFRESH = 14, CHECK = 15;
 
     private final int kind;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -95,6 +96,16 @@ final class IconView extends View {
                 break;
             case CLEAR:
                 line(cv, 7, 7, 17, 17); line(cv, 17, 7, 7, 17);
+                break;
+            case REFRESH: // circular arrow
+                r.set(4, 4, 20, 20);
+                cv.drawArc(r, -45, -270, false, p);
+                path.moveTo(18, 2.5f); path.lineTo(18, 6.8f); path.lineTo(13.7f, 6.8f);
+                cv.drawPath(path, p);
+                break;
+            case CHECK:
+                path.moveTo(5, 12.5f); path.lineTo(9.5f, 17); path.lineTo(19, 7.5f);
+                cv.drawPath(path, p);
                 break;
             case ISLAND: // pill at the top of a phone screen
                 rect(cv, 6, 2.5f, 18, 21.5f, 3);
