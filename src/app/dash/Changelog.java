@@ -83,6 +83,10 @@ public final class Changelog {
         ENTRIES.put(48, new String[]{
                 "Один пинг на экране: плитка «Пинг» убрана, пинг в карточке сервера, нажатие на него перемеряет",
         });
+        ENTRIES.put(49, new String[]{
+                "Главный экран как в One UI: долгое нажатие на плитку — и её можно двигать, а за уголки менять размер",
+                "Плитки от маленькой квадратной до широкой в два ряда, лишние убираются, спрятанные возвращаются кнопкой «Добавить»",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

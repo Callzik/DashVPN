@@ -151,7 +151,10 @@ public class SettingsActivity extends Activity {
 
     private void open(int id) {
         if (id == P_APPS) { startActivity(new Intent(this, AppsActivity.class)); return; }
-        if (id == P_HOME) { startActivity(new Intent(this, HomeLayoutActivity.class)); return; }
+        if (id == P_HOME) { // arranged right on the main screen
+            startActivity(new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_EDIT_HOME, true));
+            return;
+        }
         rootScroll = scroll.getScrollY();
         hideKeyboard();
         page = id;
@@ -208,7 +211,7 @@ public class SettingsActivity extends Activity {
                 return n == 0 ? "Все приложения через VPN" : "Напрямую: " + n;
             }
             case P_SHARE: return prefs.shareProxy() ? "Включена · порт " + Prefs.SHARE_PORT : "Выключена";
-            case P_HOME: return "Какие плашки и в каком порядке";
+            case P_HOME: return "Размер и место плиток";
             case P_SERVERS: return "Какие серверы в какой группе";
             case P_ISLAND: {
                 Boolean a = LiveUpdate.allowed(this);
