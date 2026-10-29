@@ -46,10 +46,6 @@ func TestSubInfo(t *testing.T) {
 	if got := ParseSubInfo(fmt.Sprintf("download=%d; total=%d", 3*gib/2, 2*gib)).Text(now); got != "1.5 / 2 ГБ" {
 		t.Fatalf("fraction: %q", got)
 	}
-	if MostUrgent([]*SubInfo{a, nil, low, unl}, now) != low || MostUrgent([]*SubInfo{a, old, low}, now) != old ||
-		MostUrgent([]*SubInfo{unl, a}, now) != a || MostUrgent([]*SubInfo{nil}, now) != nil {
-		t.Fatal("most urgent")
-	}
 }
 
 func TestLoadSubsKeepsInfo(t *testing.T) {
@@ -65,11 +61,19 @@ func TestLoadSubsKeepsInfo(t *testing.T) {
 	if got := c.loadSubs([]string{srv.URL}); len(got) != 1 {
 		t.Fatalf("subs: %v", got)
 	}
-	if ring := c.SubRing(time.Now()); ring == nil || ring["label"] != "∞" {
+	if ring := Ring(p.Get().Infos[srv.URL], time.Now()); ring == nil || ring["label"] != "∞" || ring["text"] != "0 / 1 ГБ" {
 		t.Fatalf("ring: %v", ring)
 	}
+	p.MarkUpdated()
+	if c.savedSubs([]string{srv.URL}) == nil {
+		t.Fatal("saved copy with info should be used")
+	}
+	p.Update(func(d *PrefsData) { delete(d.Infos, srv.URL) })
+	if c.savedSubs([]string{srv.URL}) != nil {
+		t.Fatal("a copy saved before 2.8.0 should be downloaded again")
+	}
 	p.RemoveSub(srv.URL)
-	if c.SubRing(time.Now()) != nil {
-		t.Fatal("ring after remove")
+	if _, ok := p.Get().Infos[srv.URL]; ok {
+		t.Fatal("info after remove")
 	}
 }

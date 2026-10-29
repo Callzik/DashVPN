@@ -493,6 +493,7 @@ public class BoxVpnService extends VpnService {
             e.name = Subs.label(prefs, url);
             e.body = Subs.isHttp(url) ? prefs.subCache(url) : url;
             if (e.body.isEmpty()) return null;
+            if (Subs.isHttp(url) && !prefs.hasSubInfo(url)) return null; // saved before traffic info was kept
             out.add(e);
         }
         return out;
@@ -540,6 +541,7 @@ public class BoxVpnService extends VpnService {
                         e.body = body;
                         out.add(e);
                     } catch (Exception ex) {
+                        if (!prefs.hasSubInfo(url)) prefs.subInfo(url, ""); // tried: do not hold every connect for it
                         e.name = Subs.label(prefs, url);
                         String cache = prefs.subCache(url);
                         AppState.log(e.name + ": не удалось скачать (" + ex.getMessage() + ")"

@@ -1,6 +1,5 @@
 package app.dash;
 
-import java.util.List;
 import java.util.Locale;
 
 /**
@@ -68,27 +67,10 @@ public final class SubInfo {
         return d >= 0 ? t + " · " + d + " дн" : t;
     }
 
-    /** Lower is more urgent: over, then low, then by days left. */
-    private long rank(long nowMs) {
-        if (over(nowMs)) return -2;
-        if (low(nowMs)) return -1;
-        int d = daysLeft(nowMs);
-        return d < 0 ? Long.MAX_VALUE : d;
-    }
-
-    /** The subscription that needs attention first, null if none has data. */
-    public static SubInfo mostUrgent(List<SubInfo> list, long nowMs) {
-        SubInfo best = null;
-        for (SubInfo s : list) {
-            if (s == null) continue;
-            if (best == null || s.rank(nowMs) < best.rank(nowMs)) best = s;
-        }
-        return best;
-    }
-
     private static String gb(long bytes) {
         double g = bytes / 1073741824.0;
-        if (g >= 10 || g == Math.floor(g)) return String.valueOf(Math.round(g));
-        return String.format(Locale.ROOT, "%.1f", g);
+        if (g >= 10) return String.valueOf(Math.round(g));
+        String t = String.format(Locale.ROOT, "%.1f", g);
+        return t.endsWith(".0") ? t.substring(0, t.length() - 2) : t;
     }
 }

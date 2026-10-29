@@ -78,6 +78,8 @@ public final class Prefs {
 
     /** The panel's subscription-userinfo header as last downloaded, "" when it sent none. */
     public String subInfo(String url) { return p.getString("info:" + url, ""); }
+    /** False until a download made by 2.8.0 or newer has looked for the header. */
+    public boolean hasSubInfo(String url) { return p.contains("info:" + url); }
     public void subInfo(String url, String h) { p.edit().putString("info:" + url, h).apply(); }
 
     public long subUpdated() { return p.getLong("sub_updated", 0); }

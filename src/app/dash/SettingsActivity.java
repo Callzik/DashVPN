@@ -643,16 +643,31 @@ public class SettingsActivity extends Activity {
             final String url = urls.get(i);
             if (i > 0) subList.addView(Ui.divider(c));
             LinearLayout row = Ui.row(c);
+            // traffic and days left from the panel, when it reports them: an orbit ring and "12 / 50 ГБ · 38 дн"
+            SubInfo si = Subs.isHttp(url) ? SubInfo.parse(prefs.subInfo(url)) : null;
+            long now = System.currentTimeMillis();
+            if (si != null) {
+                SubRing ring = new SubRing(c);
+                ring.set(si);
+                LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(Ui.dp(c, 46), Ui.dp(c, 46));
+                rlp.rightMargin = Ui.dp(c, 12);
+                row.addView(ring, rlp);
+            }
             LinearLayout text = new LinearLayout(c);
             text.setOrientation(LinearLayout.VERTICAL);
             TextView name = Ui.text(c, Subs.label(prefs, url), 15, Ui.FG, true);
             name.setSingleLine(true);
             text.addView(name);
-            TextView link = Ui.text(c, url, 12, Ui.MUTED, false);
-            link.setTypeface(Typeface.MONOSPACE);
-            link.setSingleLine(true);
-            link.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-            text.addView(link);
+            if (si != null) {
+                int col = si.over(now) ? Ui.BAD : si.low(now) ? Ui.WARN : Ui.MUTED;
+                text.addView(Ui.text(c, si.text(now), 13, col, false));
+            } else {
+                TextView link = Ui.text(c, url, 12, Ui.MUTED, false);
+                link.setTypeface(Typeface.MONOSPACE);
+                link.setSingleLine(true);
+                link.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+                text.addView(link);
+            }
             row.addView(text, Ui.weight());
             TextView del = Ui.text(c, "✕", 18, Ui.MUTED, false);
             del.setPadding(Ui.dp(c, 14), Ui.dp(c, 6), Ui.dp(c, 4), Ui.dp(c, 6));

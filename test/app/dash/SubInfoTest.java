@@ -1,8 +1,6 @@
 package app.dash;
 
-import java.util.Arrays;
-
-/** subscription-userinfo parsing and the ring's choice. */
+/** subscription-userinfo parsing. */
 public final class SubInfoTest {
     private static final long NOW = 1_800_000_000_000L;
     private static final long GB = 1073741824L;
@@ -32,12 +30,9 @@ public final class SubInfoTest {
         check(SubInfo.parse("upload=1; download=2; total=0; expire=0") == null, "nothing useful");
         check(SubInfo.parse("garbage") == null, "garbage");
         check(SubInfo.parse("total=5.36870912E10; expire=abc") != null, "float total");
+        check(SubInfo.parse("download=3; total=" + GB).text(NOW).equals("0 / 1 ГБ"), "tiny use");
         check("1.5".equals(SubInfo.parse("download=" + (3 * GB / 2) + "; total=" + 2 * GB).text(NOW).split(" ")[0]), "fraction GB");
 
-        check(SubInfo.mostUrgent(Arrays.asList(a, null, low, unl), NOW) == low, "low before fine");
-        check(SubInfo.mostUrgent(Arrays.asList(a, old, low), NOW) == old, "over first");
-        check(SubInfo.mostUrgent(Arrays.asList(unl, a), NOW) == a, "fewer days first");
-        check(SubInfo.mostUrgent(Arrays.asList((SubInfo) null), NOW) == null, "none");
         System.out.println("SubInfoTest: ok");
     }
 

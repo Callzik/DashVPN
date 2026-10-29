@@ -281,7 +281,8 @@ func (c *Core) boot(g int) error {
 // else nil. Connecting then does not wait for the download; the periodic check refreshes them.
 // Adding, removing or manually refreshing a subscription resets the time, so those always download.
 func (c *Core) savedSubs(urls []string) []SubEntry {
-	age := time.Since(time.Unix(c.prefs.Get().SubUpdated, 0))
+	d := c.prefs.Get()
+	age := time.Since(time.Unix(d.SubUpdated, 0))
 	if age < 0 || age >= subRefresh {
 		return nil
 	}
@@ -293,6 +294,9 @@ func (c *Core) savedSubs(urls []string) []SubEntry {
 		}
 		if body == "" {
 			return nil
+		}
+		if _, ok := d.Infos[u]; isHTTP(u) && !ok {
+			return nil // saved before traffic info was kept
 		}
 		out = append(out, SubEntry{URL: u, Name: c.prefs.SubLabel(u), Body: body})
 	}
@@ -378,14 +382,14 @@ func (c *Core) loadSubs(urls []string) []SubEntry {
 			if title != "" {
 				c.prefs.Update(func(d *PrefsData) { d.Names[u] = title })
 			}
-			if err == nil {
-				c.prefs.Update(func(d *PrefsData) {
-					if d.Infos == nil {
-						d.Infos = map[string]string{}
-					}
-					d.Infos[u] = info
-				})
-			}
+			c.prefs.Update(func(d *PrefsData) {
+				if d.Infos == nil {
+					d.Infos = map[string]string{}
+				}
+				if _, seen := d.Infos[u]; err == nil || !seen {
+					d.Infos[u] = info // a failed try still counts, so connecting does not wait for it every time
+				}
+			})
 			name := c.prefs.SubLabel(u)
 			cache := c.prefs.Cache(u)
 			if err != nil {

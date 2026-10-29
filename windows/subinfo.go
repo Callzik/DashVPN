@@ -95,59 +95,20 @@ func (s *SubInfo) Text(now time.Time) string {
 	return t
 }
 
-// rank: lower is more urgent: over, then low, then by days left.
-func (s *SubInfo) rank(now time.Time) int64 {
-	switch {
-	case s.Over(now):
-		return -2
-	case s.Low(now):
-		return -1
-	}
-	if d := s.DaysLeft(now); d >= 0 {
-		return int64(d)
-	}
-	return math.MaxInt64
-}
-
-// MostUrgent is the subscription that needs attention first, nil if none has data.
-func MostUrgent(list []*SubInfo, now time.Time) *SubInfo {
-	var best *SubInfo
-	for _, s := range list {
-		if s != nil && (best == nil || s.rank(now) < best.rank(now)) {
-			best = s
-		}
-	}
-	return best
-}
-
 func gb(b int64) string {
 	g := float64(b) / (1 << 30)
-	if g >= 10 || g == math.Floor(g) {
+	if g >= 10 {
 		return strconv.FormatInt(int64(math.Round(g)), 10)
 	}
-	return strconv.FormatFloat(g, 'f', 1, 64)
+	return strings.TrimSuffix(strconv.FormatFloat(g, 'f', 1, 64), ".0")
 }
 
-// SubRing is what the servers screen draws: the arc is the traffic spent, the label the days left.
-// State: ok, low, over or unlimited (no traffic limit; no end date is shown as ∞).
-func (c *Core) SubRing(now time.Time) map[string]any {
-	d := c.prefs.Get()
-	var infos []*SubInfo
-	var lines []string
-	for _, u := range d.Subs {
-		si := ParseSubInfo(d.Infos[u])
-		if si == nil {
-			continue
-		}
-		infos = append(infos, si)
-		lines = append(lines, c.prefs.SubLabel(u)+" · "+si.Text(now))
-	}
-	s := MostUrgent(infos, now)
+// Ring is what the subscriptions list draws: the arc is the traffic spent, the label the days left.
+// State: ok, low, over or unlimited (no traffic limit; no end date is shown as ∞). nil without data.
+func Ring(h string, now time.Time) map[string]any {
+	s := ParseSubInfo(h)
 	if s == nil {
 		return nil
-	}
-	if len(lines) == 1 {
-		lines[0] = s.Text(now)
 	}
 	state, label := "ok", "∞"
 	if n := s.DaysLeft(now); n >= 0 {
@@ -162,5 +123,5 @@ func (c *Core) SubRing(now time.Time) map[string]any {
 	case s.Total <= 0:
 		state = "unlimited"
 	}
-	return map[string]any{"state": state, "label": label, "part": part, "lines": lines}
+	return map[string]any{"state": state, "label": label, "part": part, "text": s.Text(now)}
 }
