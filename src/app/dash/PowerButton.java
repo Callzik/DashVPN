@@ -8,7 +8,7 @@ import android.graphics.RectF;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
 
-/** "Orbit" connect button: round button (a planet when connected) inside an orbit ring with a comet flying around it. */
+/** "Orbit" connect button: round button inside an orbit ring with a comet flying around it. */
 public class PowerButton extends View {
     private int state = AppState.OFF;
     private float burst = -1; // 0..1 after connecting, -1 when idle
@@ -147,18 +147,9 @@ public class PowerButton extends View {
 
         // button
         fill.setColor(btnFill);
-        if (state == AppState.ON) {
-            // a lit planet: highlight top left, dark limb bottom right
-            fill.setShadowLayer(Ui.dp(ctx, 35), 0, 0, alpha(accent, 0.55f));
-            fill.setShader(new android.graphics.RadialGradient(cx - 0.32f * rb, cy - 0.40f * rb, 1.55f * rb,
-                    new int[]{0xFFFFFFFF, 0xFFC9C0FF, 0xFF8B7CFF, 0xFF4B3BC9, 0xFF2A1F7A},
-                    new float[]{0f, 0.08f, 0.30f, 0.62f, 0.85f}, android.graphics.Shader.TileMode.CLAMP));
-        } else {
-            fill.clearShadowLayer();
-            fill.setShader(null);
-        }
+        if (state == AppState.ON) fill.setShadowLayer(Ui.dp(ctx, 30), 0, 0, alpha(accent, 0.45f));
+        else fill.clearShadowLayer();
         c.drawCircle(cx, cy, rb, fill);
-        fill.setShader(null);
         if (state != AppState.ON) {
             stroke.setColor(btnStroke);
             c.drawCircle(cx, cy, rb, stroke);
