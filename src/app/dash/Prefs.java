@@ -161,6 +161,9 @@ public final class Prefs {
     /** Main screen tiles in order, "!" before an id = hidden; null = never customised. */
     public String homeTiles() { return p.getString("home_tiles", null); }
     public void homeTiles(String v) { p.edit().putString("home_tiles", v).apply(); }
+    // grid layout of the main screen tiles (Tiles); home_tiles is the old ordered list, read once to migrate
+    public String homeGrid() { return p.getString("home_grid", null); }
+    public void homeGrid(String v) { p.edit().putString("home_grid", v).apply(); }
 
     /** versionCode of the build whose "что нового" the user has already seen, 0 = never shown. */
     public int lastSeenVersion() { return p.getInt("last_seen_version", 0); }

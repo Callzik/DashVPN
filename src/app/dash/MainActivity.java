@@ -27,6 +27,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 public class MainActivity extends Activity {
+    static final String EXTRA_EDIT_HOME = "edit_home";
     private static final int REQ_VPN = 1;
 
     private Prefs prefs;
@@ -35,7 +36,9 @@ public class MainActivity extends Activity {
 
     private TextView netChip, title, subtitle, banner, wlBadge, srvName, srvSub, srvBadge, errorText;
     private TextView speedVal, trafficVal, ipFlag, ipText, ipCountry;
-    private LinearLayout tilesBox;
+    private TileGrid grid;
+    private LinearLayout editBar;
+    private TextView editAdd, editRemove;
     private String tilesSig;
     private PowerButton power;
     private StarField stars;
@@ -115,6 +118,10 @@ public class MainActivity extends Activity {
 
     /** Tile / widget asked to connect but needed the screen (permission or subscription). */
     private void handleIntent(Intent intent) {
+        if (intent != null && intent.getBooleanExtra(EXTRA_EDIT_HOME, false)) { // Settings → Главный экран
+            intent.removeExtra(EXTRA_EDIT_HOME);
+            if (grid != null) grid.setEdit(true, null);
+        }
         if (intent == null || !intent.getBooleanExtra(VpnControl.EXTRA_CONNECT, false)) return;
         intent.removeExtra(VpnControl.EXTRA_CONNECT);
         if (AppState.vpn == AppState.OFF && !prefs.subUrl().trim().isEmpty()) toggle();
@@ -124,7 +131,7 @@ public class MainActivity extends Activity {
         super.onResume();
         AppState.addListener(listener);
         handler.post(ticker);
-        if (tilesBox != null) rebuildTiles();
+        if (grid != null) rebuildTiles();
         showScreen();
         Updater.check(this, false);
     }
@@ -220,72 +227,146 @@ public class MainActivity extends Activity {
         col.addView(updCard, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
 
         // tiles: built from the user's layout (Settings → Главный экран)
-        tilesBox = new LinearLayout(c);
-        tilesBox.setOrientation(LinearLayout.VERTICAL);
-        col.addView(tilesBox, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0));
+        // edit bar: shown while tiles are being arranged
+        editBar = Ui.row(c);
+        editBar.setVisibility(View.GONE);
+        editAdd = Ui.button(c, "Добавить", false);
+        editAdd.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { addTileMenu(v); }
+        });
+        editBar.addView(editAdd, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        editRemove = Ui.button(c, "Убрать", false);
+        editRemove.setTextColor(Ui.BAD);
+        editRemove.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { grid.removeSelected(); }
+        });
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        rp.leftMargin = Ui.dp(c, 10);
+        editBar.addView(editRemove, rp);
+        TextView done = Ui.button(c, "Готово", true);
+        done.setTextSize(15);
+        done.setMinHeight(Ui.dp(c, 48));
+        done.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { grid.setEdit(false, null); }
+        });
+        LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        dp.leftMargin = Ui.dp(c, 10);
+        editBar.addView(done, dp);
+        col.addView(editBar, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0));
+
+        // tiles on a grid: long press to move, resize, add or remove them
+        grid = new TileGrid(c, new TileGrid.Host() {
+            @Override public View make(Tiles.Item it) {
+                View v = makeTile(it);
+                handler.post(listener); // fill the new view right away, not on the next tick
+                final String id = it.id;
+                v.setOnLongClickListener(new View.OnLongClickListener() {
+                    @Override public boolean onLongClick(View v) {
+                        v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                        grid.setEdit(true, id);
+                        return true;
+                    }
+                });
+                return v;
+            }
+            @Override public void changed(java.util.List<Tiles.Item> items) {
+                Tiles.save(prefs, items);
+                tilesSig = Tiles.signature(prefs);
+                render();
+            }
+            @Override public void editState(boolean edit, String selected) {
+                editBar.setVisibility(edit ? View.VISIBLE : View.GONE);
+                editRemove.setEnabled(selected != null);
+                editRemove.setAlpha(selected != null ? 1f : 0.4f);
+                boolean hidden = false;
+                for (Tiles.Item t : grid.items()) if (!t.on) hidden = true;
+                editAdd.setEnabled(hidden);
+                editAdd.setAlpha(hidden ? 1f : 0.4f);
+            }
+        });
+        col.addView(grid, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
         rebuildTiles();
 
         return sv;
     }
 
-    /** Re-creates the tiles when the layout changed; references of hidden tiles become null. */
+    /** Re-creates the tiles when the layout changed elsewhere; references of hidden tiles become null. */
     private void rebuildTiles() {
+        if (grid.editing()) return;
         String sig = Tiles.signature(prefs);
         if (sig.equals(tilesSig)) return;
         tilesSig = sig;
-        Context c = this;
-        tilesBox.removeAllViews();
         wlBadge = speedVal = trafficVal = ipFlag = ipText = ipCountry = srvName = srvSub = null;
         srvFlag = null;
         srvPing = null;
         srvKey = "";
-        View.OnLongClickListener edit = new View.OnLongClickListener() {
-            @Override public boolean onLongClick(View v) {
-                startActivity(new Intent(MainActivity.this, HomeLayoutActivity.class));
-                return true;
-            }
-        };
-        LinearLayout pair = null; // row waiting for a second narrow tile
-        for (Tiles.Item it : Tiles.load(prefs)) {
-            if (!it.on) continue;
-            View v = makeTile(it.id);
-            v.setOnLongClickListener(edit);
-            if (Tiles.wide(it.id)) {
-                pair = null;
-                tilesBox.addView(v, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
-            } else if (pair == null) {
-                pair = new LinearLayout(c);
-                pair.setOrientation(LinearLayout.HORIZONTAL);
-                pair.addView(v, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-                tilesBox.addView(pair, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
-            } else {
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-                lp.leftMargin = Ui.dp(c, 10);
-                pair.addView(v, lp);
-                pair = null;
-            }
-        }
+        grid.setItems(Tiles.load(prefs));
     }
 
-    private View makeTile(String id) {
+    private void addTileMenu(View anchor) {
+        android.widget.PopupMenu m = new android.widget.PopupMenu(this, anchor);
+        final java.util.List<String> ids = new java.util.ArrayList<>();
+        for (Tiles.Item t : grid.items()) {
+            if (t.on) continue;
+            ids.add(t.id);
+            m.getMenu().add(0, ids.size() - 1, 0, Tiles.title(t.id));
+        }
+        m.setOnMenuItemClickListener(new android.widget.PopupMenu.OnMenuItemClickListener() {
+            @Override public boolean onMenuItemClick(android.view.MenuItem item) {
+                grid.add(ids.get(item.getItemId()));
+                return true;
+            }
+        });
+        m.show();
+    }
+
+    @Override public void onBackPressed() {
+        if (grid != null && grid.editing()) { grid.setEdit(false, null); return; }
+        super.onBackPressed();
+    }
+
+    /** A tile laid out for its size: 1–4 columns wide, 1–2 rows high. */
+    private View makeTile(Tiles.Item it) {
         Context c = this;
-        switch (id) {
+        int w = it.w, h = it.h;
+        switch (it.id) {
             case Tiles.WL: {
-                LinearLayout t = statTile("Белые списки");
-                wlBadge = statValue(t, false);
+                LinearLayout t = statTile(w == 1 ? "Списки" : "Белые списки", h);
+                wlBadge = statValue(t, false, h);
                 return t;
             }
             case Tiles.SPEED: {
-                LinearLayout t = statTile("Скорость, Мбит/с");
-                speedVal = statValue(t, true);
+                LinearLayout t = statTile(w == 1 ? "Мбит/с" : "Скорость, Мбит/с", h);
+                speedVal = statValue(t, true, h);
                 return t;
             }
             case Tiles.TRAFFIC: {
-                LinearLayout t = statTile("Трафик");
-                trafficVal = statValue(t, true);
+                LinearLayout t = statTile("Трафик", h);
+                trafficVal = statValue(t, true, h);
                 return t;
             }
             case Tiles.IP: {
+                if (w <= 2) { // compact: flag over the address
+                    LinearLayout t = new LinearLayout(c);
+                    t.setOrientation(LinearLayout.VERTICAL);
+                    t.setGravity(h == 1 && w == 1 ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
+                    t.setBackground(Ui.round(c, Ui.SURFACE, 16, Ui.LINE));
+                    t.setPadding(Ui.dp(c, 12), Ui.dp(c, 8), Ui.dp(c, 12), Ui.dp(c, 8));
+                    ipFlag = Ui.text(c, "🌐", h == 2 ? 30 : w == 1 ? 26 : 20, Ui.FG, false);
+                    t.addView(ipFlag);
+                    ipText = Ui.text(c, "—", 15, Ui.FG, true);
+                    ipText.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+                    ipText.setSingleLine(true);
+                    ipText.setAutoSizeTextTypeUniformWithConfiguration(8, h == 2 ? 18 : 15, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+                    ipText.setVisibility(w == 1 && h == 1 ? View.GONE : View.VISIBLE);
+                    t.addView(ipText, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, 22)));
+                    ipCountry = Ui.text(c, "", 12, Ui.MUTED, false);
+                    ipCountry.setSingleLine(true);
+                    ipCountry.setVisibility(h == 2 ? View.VISIBLE : View.GONE);
+                    t.addView(ipCountry);
+                    t.setOnClickListener(copyIp());
+                    return t;
+                }
                 LinearLayout t = Ui.row(c);
                 t.setBackground(Ui.round(c, Ui.SURFACE, 16, Ui.LINE));
                 t.setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 12));
@@ -304,26 +385,23 @@ public class MainActivity extends Activity {
                 ipCountry.setGravity(Gravity.END);
                 ipCountry.setMaxWidth(Ui.dp(c, 130));
                 t.addView(ipCountry);
-                t.setOnClickListener(new View.OnClickListener() {
-                    @Override public void onClick(View v) {
-                        if (Stats.ip.isEmpty()) { Stats.refreshIp(); return; }
-                        android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                        cb.setPrimaryClip(ClipData.newPlainText("ip", Stats.ip));
-                        Toast.makeText(MainActivity.this, "IP скопирован", Toast.LENGTH_SHORT).show();
-                    }
-                });
+                t.setOnClickListener(copyIp());
                 return t;
             }
-            default: { // server card
-                LinearLayout srv = Ui.row(c);
+            default: { // server card: flag; name from 2 columns; ping and "Авто" from 3
+                srvKey = "";
+                LinearLayout srv = new LinearLayout(c);
+                srv.setOrientation(w == 1 || (w == 2 && h == 2) ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+                srv.setGravity(w == 1 ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
                 srv.setBackground(Ui.round(c, 0xD113121A, 18, Ui.LINE));
-                srv.setPadding(Ui.dp(c, 13), Ui.dp(c, 13), Ui.dp(c, 16), Ui.dp(c, 13));
+                srv.setPadding(Ui.dp(c, w == 1 ? 6 : 13), Ui.dp(c, 6), Ui.dp(c, w == 1 ? 6 : 16), Ui.dp(c, 6));
                 srvFlag = new FrameLayout(c);
                 srvFlag.setBackground(Ui.round(c, Ui.SURFACE2, 12, 0));
                 srv.addView(srvFlag, new LinearLayout.LayoutParams(Ui.dp(c, 40), Ui.dp(c, 40)));
                 LinearLayout srvText = new LinearLayout(c);
                 srvText.setOrientation(LinearLayout.VERTICAL);
-                srvText.setPadding(Ui.dp(c, 12), 0, Ui.dp(c, 8), 0);
+                srvText.setPadding(srv.getOrientation() == LinearLayout.HORIZONTAL ? Ui.dp(c, 12) : 0, srv.getOrientation() == LinearLayout.VERTICAL ? Ui.dp(c, 8) : 0, Ui.dp(c, 8), 0);
+                srvText.setVisibility(w == 1 ? View.GONE : View.VISIBLE);
                 srvName = Ui.text(c, "Авто", 16, Ui.FG, true);
                 srvName.setSingleLine(true);
                 srvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -332,9 +410,18 @@ public class MainActivity extends Activity {
                 srvSub.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 srvText.addView(srvName);
                 srvText.addView(srvSub, Ui.lp(c, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 2));
-                srv.addView(srvText, Ui.weight());
+                srvSub.setVisibility(w >= 3 ? View.VISIBLE : View.GONE);
+                srv.addView(srvText, srv.getOrientation() == LinearLayout.HORIZONTAL ? Ui.weight()
+                        : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
                 srvPing = Ui.row(c);
-                srv.addView(srvPing);
+                srvPing.setVisibility(w >= 3 || h == 2 ? View.VISIBLE : View.GONE);
+                if (srv.getOrientation() == LinearLayout.VERTICAL) {
+                    LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    pp.topMargin = Ui.dp(c, 6);
+                    srv.addView(srvPing, pp);
+                } else {
+                    srv.addView(srvPing);
+                }
                 srvPing.setOnClickListener(new View.OnClickListener() {
                     @Override public void onClick(View v) {
                         BoxVpnService s = BoxVpnService.instance;
@@ -349,10 +436,23 @@ public class MainActivity extends Activity {
         }
     }
 
-    private LinearLayout statTile(String label) {
+    private View.OnClickListener copyIp() {
+        return new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (Stats.ip.isEmpty()) { Stats.refreshIp(); return; }
+                android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                cb.setPrimaryClip(ClipData.newPlainText("ip", Stats.ip));
+                Toast.makeText(MainActivity.this, "IP скопирован", Toast.LENGTH_SHORT).show();
+            }
+        };
+    }
+
+    /** Label on top; a two-row tile puts its value at the bottom, larger. */
+    private LinearLayout statTile(String label, int h) {
         Context c = this;
         LinearLayout t = new LinearLayout(c);
         t.setOrientation(LinearLayout.VERTICAL);
+        if (h == 1) t.setGravity(Gravity.CENTER_VERTICAL);
         t.setBackground(Ui.round(c, Ui.SURFACE, 16, Ui.LINE));
         t.setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 10), Ui.dp(c, 12));
         TextView l = Ui.text(c, label, 12, Ui.MUTED, false);
@@ -362,13 +462,19 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    private TextView statValue(LinearLayout t, boolean mono) {
+    private TextView statValue(LinearLayout t, boolean mono, int h) {
         Context c = this;
-        TextView v = Ui.text(c, "—", mono ? 20 : 18, Ui.FG, true);
+        int max = h == 2 ? (mono ? 30 : 28) : (mono ? 20 : 18);
+        TextView v = Ui.text(c, "—", max, Ui.FG, true);
         if (mono) v.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         v.setSingleLine(true);
-        v.setAutoSizeTextTypeUniformWithConfiguration(11, mono ? 20 : 18, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
-        t.addView(v, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, 28)));
+        v.setGravity(Gravity.BOTTOM);
+        v.setAutoSizeTextTypeUniformWithConfiguration(9, max, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        if (h == 2) { // label at the top, value pinned to the bottom
+            View spacer = new View(c);
+            t.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
+        }
+        t.addView(v, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, h == 2 ? 42 : 28)));
         return v;
     }
 
