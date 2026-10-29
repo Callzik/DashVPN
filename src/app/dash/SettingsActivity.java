@@ -35,13 +35,13 @@ public class SettingsActivity extends Activity {
     };
 
     private static final int ROOT = -1, P_SUBS = 0, P_AUTO = 1, P_ROUTE = 2, P_APPS = 3, P_SHARE = 4,
-            P_HOME = 5, P_SERVERS = 6, P_UPDATE = 7, P_LOG = 8, P_ISLAND = 9;
+            P_HOME = 5, P_SERVERS = 6, P_UPDATE = 7, P_LOG = 8, P_ISLAND = 9, P_LOCK = 10;
     private static final String[] TITLES = {"Подписки", "Автовыбор серверов", "Маршрутизация",
-            "Приложения без VPN", "Раздача VPN", "Главный экран", "Серверы из подписки", "Обновление", "Журнал", "Остров и Now Bar"};
+            "Приложения без VPN", "Раздача VPN", "Главный экран", "Серверы из подписки", "Обновление", "Журнал", "Остров и Now Bar", "Только через VPN"};
     private static final int[] ICONS = {IconView.SUBS, IconView.AUTO, IconView.ROUTE, IconView.APPS,
-            IconView.SHARE, IconView.HOME, IconView.SERVERS, IconView.UPDATE, IconView.LOG, IconView.ISLAND};
+            IconView.SHARE, IconView.HOME, IconView.SERVERS, IconView.UPDATE, IconView.LOG, IconView.ISLAND, IconView.LOCK};
     private static final int[] COLORS = {Ui.ACCENT, 0xFFF2B544, 0xFF5AA9FF, 0xFFFF9F6B,
-            0xFF4FD1C5, 0xFFF27BB0, 0xFFB48CFF, 0xFF6BD68A, 0xFFF0716B, 0xFF5AA9FF};
+            0xFF4FD1C5, 0xFFF27BB0, 0xFFB48CFF, 0xFF6BD68A, 0xFFF0716B, 0xFF5AA9FF, 0xFFF0716B};
     /** Extra words the search finds a page by: what is inside it, not only its title. */
     private static final String[] KEYS = {
             "ссылка подписка ключ vless добавить удалить вставить обновить переподключить",
@@ -53,8 +53,9 @@ public class SettingsActivity extends Activity {
             "список серверов обычные lte не участвуют заглушка",
             "версия обновить установить загрузка apk",
             "лог журнал ошибки диагностика скопировать поддержка",
-            "уведомление остров живые уведомления live update строка состояния samsung самсунг"};
-    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_SHARE}, {P_HOME, P_ISLAND}, {P_UPDATE, P_LOG}};
+            "уведомление остров живые уведомления live update строка состояния samsung самсунг",
+            "замок kill switch блокировать запретить закрыть приложения без vpn бан аккаунт утечка"};
+    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_LOCK, P_SHARE}, {P_HOME, P_ISLAND}, {P_UPDATE, P_LOG}};
     private static final String[] GROUP_NAMES = {"Подключение", "Внешний вид", "О приложении"};
 
     private ScrollView scroll;
@@ -150,7 +151,10 @@ public class SettingsActivity extends Activity {
     }
 
     private void open(int id) {
-        if (id == P_APPS) { startActivity(new Intent(this, AppsActivity.class)); return; }
+        if (id == P_APPS || id == P_LOCK) {
+            startActivity(new Intent(this, AppsActivity.class).putExtra(AppsActivity.EXTRA_LOCK, id == P_LOCK));
+            return;
+        }
         if (id == P_HOME) { // arranged right on the main screen
             startActivity(new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_EDIT_HOME, true));
             return;
@@ -209,6 +213,10 @@ public class SettingsActivity extends Activity {
             case P_APPS: {
                 int n = prefs.excludedApps().size();
                 return n == 0 ? "Все приложения через VPN" : "Напрямую: " + n;
+            }
+            case P_LOCK: {
+                int n = prefs.lockedApps().size();
+                return n == 0 ? "Выключено" : "Закрыто без VPN: " + n;
             }
             case P_SHARE: return prefs.shareProxy() ? "Включена · порт " + Prefs.SHARE_PORT : "Выключена";
             case P_HOME: return "Размер и место плиток";

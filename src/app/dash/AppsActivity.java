@@ -33,16 +33,24 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** Pick apps that bypass the VPN (banks, Gosuslugi, games …). */
+/** Pick apps that bypass the VPN (banks, Gosuslugi, games …) or, with EXTRA_LOCK, apps that must never go online without it. */
 public class AppsActivity extends Activity {
+    static final String EXTRA_LOCK = "lock";
+    private static final int REQ_VPN = 1;
+
     private static final class App {
         String pkg, label;
         Drawable icon;
     }
 
     private Prefs prefs;
+    private boolean lockMode;
     private Set<String> selected;
     private Set<String> initial;
+    /** The other list: an app can bypass the VPN or be locked to it, not both. */
+    private Set<String> other;
+    private Set<String> otherInitial;
+    private String pendingPkg;
     private final List<App> all = new ArrayList<>();
     private final List<App> shown = new ArrayList<>();
     private Adapter adapter;
@@ -53,8 +61,11 @@ public class AppsActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = new Prefs(this);
-        selected = prefs.excludedApps();
-        initial = prefs.excludedApps();
+        lockMode = getIntent().getBooleanExtra(EXTRA_LOCK, false);
+        selected = lockMode ? prefs.lockedApps() : prefs.excludedApps();
+        initial = new java.util.HashSet<>(selected);
+        other = lockMode ? prefs.excludedApps() : prefs.lockedApps();
+        otherInitial = new java.util.HashSet<>(other);
         getWindow().setStatusBarColor(Ui.BG);
         getWindow().setNavigationBarColor(Ui.BG);
         Context c = this;
@@ -73,11 +84,28 @@ public class AppsActivity extends Activity {
             @Override public void onClick(View v) { finish(); }
         });
         top.addView(back);
-        top.addView(Ui.text(c, "Приложения без VPN", 22, Ui.FG, true));
+        top.addView(Ui.text(c, lockMode ? "Только через VPN" : "Приложения без VPN", 22, Ui.FG, true));
         col.addView(top);
 
-        TextView hint = Ui.text(c, "Отмеченные приложения работают напрямую, мимо VPN. Пригодится для банков, Госуслуг и игр.", 13, Ui.MUTED, false);
+        TextView hint = Ui.text(c, lockMode
+                ? "Пока VPN выключен, у отмеченных приложений нет интернета."
+                : "Отмеченные приложения работают напрямую, мимо VPN. Пригодится для банков, Госуслуг и игр.", 13, Ui.MUTED, false);
         col.addView(hint, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
+        if (lockMode) {
+            // after a reboot the lock comes back by itself a few seconds later; always-on VPN closes even that gap
+            TextView always = Ui.text(c, "Постоянная VPN ›", 13, Ui.ACCENT, true);
+            always.setPadding(0, Ui.dp(c, 6), 0, Ui.dp(c, 2));
+            always.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_VPN_SETTINGS));
+                    } catch (Exception e) {
+                        Toast.makeText(AppsActivity.this, "Настройки → Подключения → VPN", Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+            col.addView(always, Ui.lp(c, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 4));
+        }
 
         EditText search = new EditText(c);
         search.setHint("Поиск");
@@ -165,14 +193,68 @@ public class AppsActivity extends Activity {
     }
 
     private void updateCount() {
-        countText.setText(selected.isEmpty() ? "Все приложения идут через VPN" : "Без VPN: " + selected.size());
+        if (lockMode) countText.setText(selected.isEmpty() ? "Ничего не выбрано" : "Закрыто без VPN: " + selected.size());
+        else countText.setText(selected.isEmpty() ? "Все приложения идут через VPN" : "Без VPN: " + selected.size());
+    }
+
+    private void pick(App a, boolean on) {
+        if (on) {
+            selected.add(a.pkg);
+            other.remove(a.pkg);
+            // the lock is a VPN of its own: it needs the permission even if Dash was never connected
+            if (lockMode && pendingPkg == null) {
+                Intent ask = android.net.VpnService.prepare(this);
+                if (ask != null) {
+                    pendingPkg = a.pkg;
+                    try {
+                        startActivityForResult(ask, REQ_VPN);
+                    } catch (Exception e) {
+                        onActivityResult(REQ_VPN, RESULT_CANCELED, null);
+                    }
+                }
+            }
+        } else {
+            selected.remove(a.pkg);
+        }
+        updateCount();
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        if (req != REQ_VPN) return;
+        if (res != RESULT_OK && pendingPkg != null) {
+            selected.remove(pendingPkg);
+            Toast.makeText(this, "Без разрешения на VPN закрыть приложение нельзя", Toast.LENGTH_LONG).show();
+            adapter.notifyDataSetChanged();
+            updateCount();
+        }
+        pendingPkg = null;
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        prefs.excludedApps(selected);
-        if (isFinishing() && !selected.equals(initial)) {
+        if (pendingPkg != null) return; // the permission dialog is on top; saved when the user comes back and leaves
+        if (lockMode) {
+            prefs.lockedApps(selected);
+            prefs.excludedApps(other);
+        } else {
+            prefs.excludedApps(selected);
+            prefs.lockedApps(other);
+        }
+        if (!isFinishing()) return;
+        Set<String> locked = lockMode ? selected : other;
+        boolean lockChanged = !(lockMode ? initial : otherInitial).equals(locked);
+        boolean bypassChanged = !(lockMode ? otherInitial : initial).equals(lockMode ? other : selected);
+        // while the VPN is on everything already goes through it; the lock matters once it is off
+        if (lockChanged && AppState.vpn == AppState.OFF) {
+            try {
+                startForegroundService(new Intent(this, BoxVpnService.class).setAction(BoxVpnService.ACTION_LOCK));
+            } catch (Exception e) {
+                AppState.log("Замок: " + e.getMessage());
+            }
+        }
+        if (bypassChanged) {
             if (AppState.vpn != AppState.OFF) {
                 final Context app = getApplicationContext();
                 VpnControl.stop(app);
@@ -215,8 +297,7 @@ public class AppsActivity extends Activity {
             final CheckBox cb = r.check;
             cb.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
                 @Override public void onCheckedChanged(android.widget.CompoundButton b, boolean v) {
-                    if (v) selected.add(a.pkg); else selected.remove(a.pkg);
-                    updateCount();
+                    pick(a, v);
                 }
             });
             r.root.setOnClickListener(new View.OnClickListener() {

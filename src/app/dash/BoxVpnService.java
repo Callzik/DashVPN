@@ -52,9 +52,14 @@ public class BoxVpnService extends VpnService {
     public static final String ACTION_STOP = "app.dash.STOP";
     public static final String ACTION_PAUSE = "app.dash.PAUSE";
     public static final String ACTION_SWITCH = "app.dash.SWITCH";
+    /** Re-read the locked apps: hold, update or drop the lock while the VPN is off. */
+    public static final String ACTION_LOCK = "app.dash.LOCK";
     private static final long PAUSE_MS = 5 * 60 * 1000L;
     private static final String CHANNEL = "vpn";
+    private static final String CHANNEL_LOCK = "lock";
+    private static final String CHANNEL_ALERT = "alert";
     static final int NOTIFY_ID = 1;
+    private static final int ALERT_ID = 3;
 
     private volatile boolean running;
     private volatile boolean stopping;
@@ -64,6 +69,10 @@ public class BoxVpnService extends VpnService {
     private ScheduledFuture<?> statusTask;
 
     private ParcelFileDescriptor tunPfd;
+    /** Lock: an interface that takes only the locked apps and never passes a packet on. */
+    private ParcelFileDescriptor lockPfd;
+    private int lockedCount;
+    private volatile boolean revoked, destroying;
     private volatile Process helper;
     private volatile Process xrayProc;
     private String xrayConfig;
@@ -94,25 +103,33 @@ public class BoxVpnService extends VpnService {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String action = intent == null ? ACTION_START : intent.getAction();
+        if (prefs == null) prefs = new Prefs(this);
+        String action = intent == null ? null : intent.getAction();
+        // restarted by the system after its process was killed: bring back what was there
+        if (action == null) action = !running && prefs.lockIdle() ? ACTION_LOCK : ACTION_START;
+        if (ACTION_LOCK.equals(action)) {
+            refreshLock();
+            return START_STICKY;
+        }
         if (ACTION_PAUSE.equals(action)) {
             pause();
             return START_STICKY;
         }
         if (ACTION_SWITCH.equals(action)) {
             if (running) switchNext();
-            else if (AppState.pausedUntil == 0) stopSelf();
+            else if (AppState.pausedUntil == 0 && lockPfd == null) stopSelf();
             return START_STICKY;
         }
         cancelPause();
         if (ACTION_STOP.equals(action)) {
+            boolean wasRunning = running;
             stopVpn("Отключено");
             if (AppState.vpn != AppState.OFF) {
                 AppState.vpn = AppState.OFF;
                 AppState.changed();
             }
-            stopSelf();
-            return START_NOT_STICKY;
+            if (!wasRunning) idle(); // stopVpn already did it otherwise
+            return lockPfd == null ? START_NOT_STICKY : START_STICKY;
         }
         startForeground(NOTIFY_ID, notification("Подключение…"));
         if (!running) startVpn();
@@ -121,13 +138,22 @@ public class BoxVpnService extends VpnService {
 
     @Override
     public void onRevoke() {
-        stopVpn("VPN отключён системой");
+        // another VPN took over or the user turned Dash off in system settings: the lock cannot stay
+        revoked = true;
+        boolean wasLocked = lockPfd != null || running && !prefs.lockedApps().isEmpty();
+        unlock();
+        cancelPause();
+        if (running) stopVpn("VPN отключён системой");
+        else idle();
+        if (wasLocked) alertUnlocked();
     }
 
     @Override
     public void onDestroy() {
         instance = null;
+        destroying = true;
         cancelPause();
+        unlock();
         stopVpn(null);
         super.onDestroy();
     }
@@ -135,7 +161,11 @@ public class BoxVpnService extends VpnService {
     private void startVpn() {
         running = true;
         stopping = false;
+        revoked = false;
         prefs = new Prefs(this);
+        prefs.lockIdle(false);
+        // the tunnel takes a few seconds: until then the locked apps stay closed
+        lock();
         instance = this;
         VpnControl.init(this);
         cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -211,6 +241,8 @@ public class BoxVpnService extends VpnService {
         xrayProc = null;
         if (xp != null) xp.destroy(); // no waiting here: this runs on the main thread
         closeServer();
+        // the lock replaces the tunnel in place, so the locked apps see no gap between the two
+        if (!destroying && !revoked) lock();
         if (tunPfd != null) {
             try {
                 tunPfd.close();
@@ -226,8 +258,151 @@ public class BoxVpnService extends VpnService {
         AppState.ping = -1;
         AppState.changed();
         if (keepService) return;
-        stopForeground(true);
-        stopSelf();
+        idle();
+    }
+
+    /* ---------- lock: apps that must never go online without the VPN ---------- */
+
+    /**
+     * Holds an interface for the locked apps only and never reads it: their packets go nowhere,
+     * other apps keep the plain network. Replaces the previous interface of this service in place.
+     * false when there is nothing to lock (no apps, no VPN permission) — any old lock is dropped then.
+     */
+    private synchronized boolean lock() {
+        if (prefs == null) prefs = new Prefs(this);
+        Set<String> apps = prefs.lockedApps();
+        if (apps.isEmpty() || destroying || revoked || VpnService.prepare(this) != null) {
+            unlock();
+            return false;
+        }
+        Builder b = new Builder();
+        b.setSession(getString(R.string.app_name));
+        b.setMtu(1500);
+        b.addAddress("172.19.0.1", 30);
+        b.addAddress("fdfe:dcba:9876::1", 126);
+        b.addRoute("0.0.0.0", 0);
+        b.addRoute("::", 0);
+        b.addDnsServer("172.19.0.2");
+        int n = 0;
+        for (String pkg : apps) {
+            if (pkg.equals(getPackageName())) continue;
+            try {
+                b.addAllowedApplication(pkg);
+                n++;
+            } catch (Exception ignored) {
+                // app was uninstalled
+            }
+        }
+        // with no allowed app at all the interface would take every app
+        if (n == 0) {
+            unlock();
+            return false;
+        }
+        if (Build.VERSION.SDK_INT >= 29) b.setMetered(false);
+        Intent open = new Intent(this, MainActivity.class);
+        b.setConfigureIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE));
+        ParcelFileDescriptor fd = null;
+        try {
+            fd = b.establish();
+        } catch (Exception e) {
+            AppState.log("Замок: " + e.getMessage());
+        }
+        if (fd == null) {
+            AppState.log("Замок: система не дала создать VPN");
+            unlock();
+            return false;
+        }
+        // no underlying network: the locked apps see a connection that is down, not a slow one
+        setUnderlyingNetworks(new Network[0]);
+        ParcelFileDescriptor old = lockPfd;
+        lockPfd = fd;
+        if (old != null) {
+            try {
+                old.close();
+            } catch (Exception ignored) {
+            }
+        }
+        if (n != lockedCount) AppState.log("Только через VPN: " + n + " прил.");
+        lockedCount = n;
+        return true;
+    }
+
+    private synchronized void unlock() {
+        if (lockPfd == null) return;
+        try {
+            lockPfd.close();
+        } catch (Exception ignored) {
+        }
+        lockPfd = null;
+        lockedCount = 0;
+    }
+
+    /** VPN off and not paused: stay in the foreground with the lock, or go away. */
+    private void idle() {
+        if (lockPfd != null && !destroying && !revoked) {
+            prefs.lockIdle(true);
+            startForeground(NOTIFY_ID, lockNotification());
+        } else {
+            if (prefs != null && !destroying) prefs.lockIdle(false);
+            stopForeground(true);
+            stopSelf();
+        }
+    }
+
+    private void refreshLock() {
+        revoked = false;
+        if (running) {
+            // started with startForegroundService: the notification has to be posted again
+            synchronized (this) {
+                lastNotif = "";
+                if (tunPfd == null) lock();
+            }
+            startForeground(NOTIFY_ID, notification("Подключение…"));
+            return;
+        }
+        if (AppState.pausedUntil > 0) {
+            startForeground(NOTIFY_ID, pauseNotification());
+            lock();
+            return;
+        }
+        startForeground(NOTIFY_ID, lockNotification());
+        lock();
+        idle();
+    }
+
+    private Notification lockNotification() {
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm.getNotificationChannel(CHANNEL_LOCK) == null) {
+            NotificationChannel ch = new NotificationChannel(CHANNEL_LOCK, "Только через VPN", NotificationManager.IMPORTANCE_MIN);
+            ch.setShowBadge(false);
+            nm.createNotificationChannel(ch);
+        }
+        Intent open = new Intent(this, MainActivity.class);
+        return new Notification.Builder(this, CHANNEL_LOCK)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle("VPN выключен")
+                .setContentText(lockedCount > 0 ? "Закрыто приложений: " + lockedCount : "Приложения закрыты")
+                .setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE))
+                .setOngoing(true)
+                .setShowWhen(false)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .addAction(action("Подключить", ACTION_START, 5))
+                .build();
+    }
+
+    private void alertUnlocked() {
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm.getNotificationChannel(CHANNEL_ALERT) == null) {
+            nm.createNotificationChannel(new NotificationChannel(CHANNEL_ALERT, "Предупреждения", NotificationManager.IMPORTANCE_HIGH));
+        }
+        Intent open = new Intent(this, MainActivity.class);
+        nm.notify(ALERT_ID, new Notification.Builder(this, CHANNEL_ALERT)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle("Замок снят")
+                .setContentText("VPN занял другой — закрытые приложения видят сеть")
+                .setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE))
+                .setAutoCancel(true)
+                .build());
     }
 
     /* ---------- boot ---------- */
@@ -1613,8 +1788,9 @@ public class BoxVpnService extends VpnService {
         }
         b.addDisallowedApplication(getPackageName());
         int skipped = 0;
+        Set<String> locked = prefs.lockedApps();
         for (String pkg : prefs.excludedApps()) {
-            if (pkg.equals(getPackageName())) continue;
+            if (pkg.equals(getPackageName()) || locked.contains(pkg)) continue;
             try {
                 b.addDisallowedApplication(pkg);
                 skipped++;
@@ -1628,7 +1804,10 @@ public class BoxVpnService extends VpnService {
         b.setConfigureIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE));
         tunPfd = b.establish();
         if (tunPfd == null) AppState.log("Система не дала создать VPN-интерфейс");
-        else AppState.log("VPN-интерфейс создан");
+        else {
+            AppState.log("VPN-интерфейс создан");
+            unlock(); // the tunnel replaced it
+        }
         return tunPfd;
     }
 
@@ -2077,8 +2256,11 @@ public class BoxVpnService extends VpnService {
         am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, android.os.SystemClock.elapsedRealtime() + PAUSE_MS,
                 "dash-resume", resume, null);
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        nm.notify(NOTIFY_ID, notification("Пауза", "VPN включится сам через " + PAUSE_MS / 60000 + " минут",
-                AppState.pausedUntil, true));
+        nm.notify(NOTIFY_ID, pauseNotification());
+    }
+
+    private Notification pauseNotification() {
+        return notification("Пауза", "VPN включится сам через " + PAUSE_MS / 60000 + " минут", AppState.pausedUntil, true);
     }
 
     private void cancelPause() {
