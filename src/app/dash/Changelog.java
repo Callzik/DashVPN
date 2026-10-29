@@ -94,6 +94,9 @@ public final class Changelog {
         ENTRIES.put(51, new String[]{
                 "Рамка в редакторе видна целиком: левый край больше не обрезается",
         });
+        ENTRIES.put(52, new String[]{
+                "Редактор без рамки: выбранная плитка остаётся яркой, остальные приглушаются",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

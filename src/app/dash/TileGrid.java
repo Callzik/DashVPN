@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Main screen tiles on a 4-column grid. In edit mode (long press) a tile is picked with a One UI style frame:
+ * Main screen tiles on a 4-column grid. In edit mode (long press) a tile is picked (the others fade back):
  * drag it to move, drag a corner to resize; other tiles make room.
  */
 public class TileGrid extends ViewGroup {
@@ -37,13 +37,8 @@ public class TileGrid extends ViewGroup {
     private String sel;
 
     private final int gap, rowH, handle;
-    private final Paint frame = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ghost = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rf = new RectF();
-    // the frame glides to the picked tile and fades in; null = not shown yet
-    private RectF frameAt;
-    private float frameAlpha;
-    private long lastFrame;
     private final android.view.animation.Interpolator ease = new android.view.animation.DecelerateInterpolator(1.8f);
     // tiles rebuilt for a new size grow or shrink from their old size, anchored at this corner
     private final Map<String, float[]> grow = new HashMap<>();
@@ -61,15 +56,11 @@ public class TileGrid extends ViewGroup {
         gap = Ui.dp(c, 10);
         rowH = Ui.dp(c, 68);
         handle = Ui.dp(c, 30);
-        // room around the tiles for the frame; the parent pulls the grid out by the same amount
+        // room around the tiles for the lifted tile; the parent pulls the grid out by the same amount
         int pad = pad(c);
         setPadding(pad, pad, pad, pad);
         setWillNotDraw(false);
         setClipChildren(false);
-        frame.setStyle(Paint.Style.STROKE);
-        frame.setStrokeCap(Paint.Cap.ROUND);
-        frame.setStrokeWidth(Ui.dp(c, 4));
-        frame.setColor(0xFFC9C6D6);
         ghost.setStyle(Paint.Style.STROKE);
         ghost.setStrokeWidth(Ui.dp(c, 1.5f));
         ghost.setColor(0x998B7CFF);
@@ -91,10 +82,20 @@ public class TileGrid extends ViewGroup {
         edit = on;
         sel = on ? select : null;
         for (View v : views.values()) v.setEnabled(!on);
-        frameAt = null;
-        host.editState(edit, sel);
+        picked();
         requestLayout();
         invalidate();
+    }
+
+    /** No frame: while editing, the tiles that are not picked fade back. */
+    private float shade(String id) {
+        return !edit || sel == null || id.equals(sel) ? 1f : 0.45f;
+    }
+
+    private void picked() {
+        host.editState(edit, sel);
+        for (Map.Entry<String, View> en : views.entrySet())
+            en.getValue().animate().alpha(shade(en.getKey())).setDuration(180).start();
     }
 
     /** Hides the picked tile. */
@@ -106,7 +107,7 @@ public class TileGrid extends ViewGroup {
         sel = null;
         sync(false);
         host.changed(items);
-        host.editState(edit, null);
+        picked();
     }
 
     /** Shows a hidden tile at the first free spot and picks it. */
@@ -120,7 +121,7 @@ public class TileGrid extends ViewGroup {
         sel = id;
         sync(false);
         host.changed(items);
-        host.editState(edit, sel);
+        picked();
     }
 
     /** Creates views for shown tiles (or rebuilds one whose size changed) and drops views of hidden ones. */
@@ -142,6 +143,7 @@ public class TileGrid extends ViewGroup {
                 }
                 v = host.make(it);
                 v.setEnabled(!edit);
+                v.setAlpha(shade(it.id));
                 views.put(it.id, v);
                 sizes.put(it.id, size);
                 addView(v);
@@ -197,7 +199,7 @@ public class TileGrid extends ViewGroup {
                 v.setScaleX(g[2] / nw);
                 v.setScaleY(g[3] / nh);
                 v.setAlpha(0.6f);
-                v.animate().scaleX(1).scaleY(1).alpha(1).setDuration(220).setInterpolator(ease).start();
+                v.animate().scaleX(1).scaleY(1).alpha(shade(it.id)).setDuration(220).setInterpolator(ease).start();
             }
         }
     }
@@ -210,49 +212,6 @@ public class TileGrid extends ViewGroup {
             c.drawRoundRect(rf, rad, rad, ghost);
         }
         super.dispatchDraw(c);
-        // the frame glides after the picked tile and fades in and out
-        long now = android.os.SystemClock.uptimeMillis();
-        float dt = lastFrame == 0 ? 16 : Math.min(48, now - lastFrame);
-        lastFrame = now;
-        boolean show = s != null && mode != MOVE;
-        float k = 1f - (float) Math.exp(-dt / 55f);
-        frameAlpha += ((show ? 1f : 0f) - frameAlpha) * k;
-        if (show) {
-            rect(s, Ui.dp(getContext(), 5));
-            if (frameAt == null) frameAt = new RectF(rf);
-            frameAt.left += (rf.left - frameAt.left) * k;
-            frameAt.top += (rf.top - frameAt.top) * k;
-            frameAt.right += (rf.right - frameAt.right) * k;
-            frameAt.bottom += (rf.bottom - frameAt.bottom) * k;
-        }
-        if (frameAt != null && frameAlpha > 0.01f) drawFrame(c, frameAt, frameAlpha);
-        boolean moving = frameAt != null && (Math.abs(frameAlpha - (show ? 1 : 0)) > 0.01f
-                || show && (Math.abs(frameAt.left - rf.left) > 0.5f || Math.abs(frameAt.top - rf.top) > 0.5f
-                || Math.abs(frameAt.right - rf.right) > 0.5f || Math.abs(frameAt.bottom - rf.bottom) > 0.5f));
-        if (moving) postInvalidateOnAnimation();
-        else lastFrame = 0;
-        if (!show && frameAlpha <= 0.01f) frameAt = null;
-    }
-
-    /** Corner brackets around the picked tile, like the One UI widget frame. */
-    private void drawFrame(Canvas c, RectF r, float alpha) {
-        float len = Ui.dp(getContext(), 16), cr = Ui.dp(getContext(), 14);
-        frame.setStrokeWidth(Ui.dp(getContext(), 1));
-        frame.setAlpha(Math.round(90 * alpha));
-        c.drawRoundRect(r, cr, cr, frame);
-        frame.setStrokeWidth(Ui.dp(getContext(), 3));
-        frame.setAlpha(Math.round(255 * alpha));
-        float L = r.left, T = r.top, R = r.right, B = r.bottom;
-        android.graphics.Path p = new android.graphics.Path();
-        float[][] cs = {{L, T, 1, 1}, {R, T, -1, 1}, {L, B, 1, -1}, {R, B, -1, -1}};
-        for (float[] q : cs) {
-            p.reset();
-            p.moveTo(q[0], q[1] + q[3] * (cr + len * 0.6f));
-            p.lineTo(q[0], q[1] + q[3] * cr);
-            p.quadTo(q[0], q[1], q[0] + q[2] * cr, q[1]);
-            p.lineTo(q[0] + q[2] * (cr + len * 0.6f), q[1]);
-            c.drawPath(p, frame);
-        }
     }
 
     private void rect(Tiles.Item it, float out) {
@@ -276,7 +235,7 @@ public class TileGrid extends ViewGroup {
                 mode = NONE;
                 Tiles.Item s = sel == null ? null : Tiles.find(items, sel);
                 if (s != null) {
-                    rect(s, Ui.dp(getContext(), 5));
+                    rect(s, 0);
                     float[][] cs = {{rf.left, rf.top}, {rf.right, rf.top}, {rf.left, rf.bottom}, {rf.right, rf.bottom}};
                     for (int i = 0; i < 4; i++) {
                         if (Math.abs(x - cs[i][0]) < handle && Math.abs(y - cs[i][1]) < handle) {
@@ -291,7 +250,7 @@ public class TileGrid extends ViewGroup {
                     if (hit != null) {
                         if (!hit.id.equals(sel)) {
                             sel = hit.id;
-                            host.editState(true, sel);
+                            picked();
                         }
                         mode = MOVE;
                         View hv = views.get(hit.id);
@@ -306,7 +265,7 @@ public class TileGrid extends ViewGroup {
                         grabY = y - rf.top;
                     } else {
                         sel = null;
-                        host.editState(true, null);
+                        picked();
                     }
                 }
                 if (mode != NONE) {
@@ -355,7 +314,9 @@ public class TileGrid extends ViewGroup {
         Tiles.Item s = Tiles.find(items, sel);
         View v = views.get(sel);
         if (s == null || v == null) return;
-        float left = x - grabX, top = y - grabY;
+        // the tile stays inside the grid so nothing is cut off at the screen edges
+        float left = Math.max(getPaddingLeft(), Math.min(getWidth() - getPaddingRight() - v.getWidth(), x - grabX));
+        float top = Math.max(getPaddingTop(), y - grabY);
         int c = Math.round((left - getPaddingLeft()) / (cellW() + gap));
         int r = Math.round(top / (rowH + gap));
         c = Math.max(0, Math.min(Tiles.COLS - s.w, c));
