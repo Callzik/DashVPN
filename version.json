@@ -6,8 +6,8 @@
     "sha256": "2422d4bffa812169cfa793d7b4e17d50ab47e0df65b81d69143bcbbe7c3f005c"
   },
   "windows": {
-    "version": "1.10.0",
-    "url": "https://github.com/Callzik/DashVPN/releases/download/windows-v1.10.0/Dash-Windows-1.10.0.zip",
-    "sha256": "701231ceaba4b2c53872e3dc4dbdbf8d4ae6fa9109205bdac2c75b1b3b2b2779"
+    "version": "1.10.1",
+    "url": "https://github.com/Callzik/DashVPN/releases/download/windows-v1.10.1/Dash-Windows-1.10.1.zip",
+    "sha256": "59b731cca892d894b9f6c0f52a7e20141c6f3905665fe0752fa59109bca8c189"
   }
 }
