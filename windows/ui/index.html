@@ -155,6 +155,22 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 .modal.on{display:flex}
 .modal .card{max-width:380px;width:100%}
 .modal li{margin:10px 0 0 18px;font-size:14px}
+/* what's new: a card rising from the bottom, items with a star bubble */
+#news{align-items:flex-end;padding:16px;backdrop-filter:blur(3px)}
+#news .sheet{position:relative;overflow:hidden;max-width:400px;width:100%;margin:0 auto;border-radius:26px;padding:26px 20px 18px;
+  background:radial-gradient(320px 200px at 50% -40px,rgba(139,124,255,.35),transparent),var(--surface);border:1px solid var(--line2);
+  box-shadow:0 20px 60px rgba(0,0,0,.6);transform:translateY(40px);opacity:0;transition:transform .45s cubic-bezier(.2,.9,.3,1.15),opacity .3s}
+#news.show .sheet{transform:none;opacity:1}
+#news .nhead{display:flex;flex-direction:column;align-items:center;text-align:center}
+#news .nlogo{width:58px;height:58px;filter:drop-shadow(0 0 18px rgba(139,124,255,.6))}
+#news .nk{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-top:12px}
+#news .nv{font-size:26px;font-weight:700;letter-spacing:-.5px;margin-top:2px}
+#news .nlist{margin-top:18px;max-height:46vh;overflow-y:auto}
+#news .ni{display:flex;gap:12px;align-items:flex-start;padding:10px 0}
+#news .ni+.ni{border-top:1px solid var(--line)}
+#news .ns{width:30px;height:30px;border-radius:10px;background:var(--accent-tint);display:grid;place-items:center;flex:none;color:var(--accent)}
+#news .ns svg{width:16px;height:16px}
+#news .nt{font-size:14px;line-height:1.4;padding-top:5px}#news .nt b{display:block;font-size:15px;margin-bottom:1px}#news .nt span{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -284,8 +300,11 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
   <button class="primary" style="margin-top:16px" onclick="addSub('onbinput',true)">Продолжить</button>
 </section>
 
-<div class="modal" id="news"><div class="card"><div class="b" style="font-size:18px" id="newstitle">Что нового</div><ul id="newslist"></ul>
-  <button class="primary" style="margin-top:18px;height:46px" onclick="newsSeen()">Понятно</button></div></div>
+<div class="modal" id="news"><div class="sheet">
+  <div class="nhead"><svg class="nlogo" viewBox="0 0 180 180"><path d="M26 150 L106 70 L120 84 Z" fill="url(#lt)"/><path d="M44 154 L110 88 L116 94 Z" fill="url(#lt)" opacity=".6"/><circle cx="120" cy="62" r="44" fill="url(#lg)"/><circle cx="120" cy="62" r="24" fill="url(#lb)"/></svg>
+    <div class="nk">Что нового</div><div class="nv" id="newstitle">Dash</div></div>
+  <div class="nlist" id="newslist"></div>
+  <button class="primary" style="margin-top:14px;height:50px" onclick="newsSeen()">Отлично</button></div></div>
 <div class="menu" id="menu"></div>
 <div class="toast" id="toast"></div>
 
@@ -482,8 +501,13 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;
   if(view==='spage')show('settings');else if(view==='apps')leaveApps();else if(view==='servers')leaveServers();else if(view==='settings')show('main')});
 let newsShown=false;
 function showNews(list){if(newsShown||!list||!list.length)return;newsShown=true;
-  $('newstitle').textContent='Что нового в Dash '+S.version;$('newslist').innerHTML=list.map(t=>`<li>${esc(t)}</li>`).join('');$('news').classList.add('on')}
-async function newsSeen(){$('news').classList.remove('on');await api('/api/news/seen')}
+  $('newstitle').textContent='Dash '+S.version;$('newslist').innerHTML=list.map(newsItem).join('');
+  $('news').classList.add('on');requestAnimationFrame(()=>requestAnimationFrame(()=>$('news').classList.add('show')))}
+// "Title: details" becomes a bold title over muted details
+const STAR='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.3 6.6 6.7.4-5.2 4.2 1.8 6.8L12 16.6l-5.6 3.9 1.8-6.8L3 9.5l6.7-.4z"/></svg>';
+function newsItem(t){const i=t.indexOf(': ');const body=i>0&&i<60?`<b>${esc(t.slice(0,i))}</b><span>${esc(t[i+2].toUpperCase()+t.slice(i+3))}</span>`:esc(t);
+  return `<div class="ni"><div class="ns">${STAR}</div><div class="nt">${body}</div></div>`}
+async function newsSeen(){$('news').classList.remove('show');setTimeout(()=>$('news').classList.remove('on'),250);await api('/api/news/seen')}
 let confirmed=null;
 function confirmBox(q){return window.confirm(q)}
 async function setOpt(key,el){const v=!el.classList.contains('on');el.classList.toggle('on',v);await api('/api/settings',{[key]:v});if(S.state!=='off')toast('Переподключение для применения')}
@@ -508,7 +532,7 @@ const SF={st:[],w:0,h:0,mode:'off',warp:0,drift:0,last:0,cx:0,cy:0};
 function starsBuild(){const cv=$('stars'),d=devicePixelRatio||1;SF.w=innerWidth;SF.h=innerHeight;cv.width=SF.w*d;cv.height=SF.h*d;
   let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
   const n=Math.max(40,Math.round(SF.w*SF.h/1800));SF.st=[];
-  for(let i=0;i<n;i++){const s=rnd();SF.st.push({x:rnd()*SF.w,y:rnd()*SF.h,r:.5+s*s*1.1,a:.12+rnd()*.45,ph:rnd()*6.283,tw:rnd()<.25,tint:rnd()<.2,z:.4+rnd()*.6})}}
+  for(let i=0;i<n;i++){const s=rnd();SF.st.push({x:rnd()*SF.w,y:rnd()*SF.h,r:.5+s*s*1.1,a:.12+rnd()*.45,ph:rnd()*6.283,tw:rnd()<.25,tint:rnd()<.2,z:.4+rnd()*.6,age:1})}}
 function starsMode(st){if(SF.mode!==st){SF.mode=st;starsCenter()}}
 function starsCenter(){const r=$('power').getBoundingClientRect();if(r.width){SF.cx=r.left+r.width/2;SF.cy=r.top+r.height/2;
   const n=$('nebula').style;n.setProperty('--nx',SF.cx+'px');n.setProperty('--ny',SF.cy+'px')}}
@@ -526,12 +550,15 @@ function starsFrame(){const cv=$('stars'),c=cv.getContext('2d'),d=devicePixelRat
     let vx=-14*SF.drift*s.z,vy=7*SF.drift*s.z;
     if(SF.warp>0){const dx=s.x-SF.cx,dy=s.y-SF.cy,L=Math.hypot(dx,dy)||1,v=SF.warp*(40+L*2.2)*s.z;vx+=dx/L*v;vy+=dy/L*v}
     s.x+=vx*dt;s.y+=vy*dt;
+    // a star that left the screen comes back as a new one that fades in: near the centre (under the button) during the jump, anywhere otherwise
     if(s.x<-60||s.x>SF.w+60||s.y<-60||s.y>SF.h+60){
-      if(SF.warp>.3){const a=Math.random()*6.283,r=20+Math.random()*90;s.x=SF.cx+Math.cos(a)*r;s.y=SF.cy+Math.sin(a)*r}
-      else{s.x=(s.x+SF.w+120)%(SF.w+120)-60;s.y=(s.y+SF.h+120)%(SF.h+120)-60}}
-    const a=(s.tw?s.a*(.45+.55*(.5+.5*Math.sin(t*.9+s.ph))):s.a)*dim;
+      if(SF.warp>.05){const a=Math.random()*6.283,r=30+Math.random()*60;s.x=SF.cx+Math.cos(a)*r;s.y=SF.cy+Math.sin(a)*r}
+      else{s.x=Math.random()*SF.w;s.y=Math.random()*SF.h}
+      s.age=0}
+    s.age=Math.min(1,s.age+dt);
+    const a=(s.tw?s.a*(.45+.55*(.5+.5*Math.sin(t*.9+s.ph))):s.a)*dim*Math.min(1,s.age/.5);
     const col=s.tint?`rgba(196,188,255,${a})`:`rgba(255,255,255,${a})`;
-    const sp=Math.hypot(vx,vy),len=Math.min(70,sp*.12);
+    const sp=Math.hypot(vx,vy),len=Math.min(70,sp*.12)*Math.min(1,s.age/.35);
     if(len>1.2){c.strokeStyle=col;c.lineWidth=s.r*1.4;c.beginPath();c.moveTo(s.x,s.y);c.lineTo(s.x-vx/sp*len,s.y-vy/sp*len);c.stroke()}
     else{c.fillStyle=col;c.beginPath();c.arc(s.x,s.y,s.r,0,7);c.fill()}}
   const fly=SF.warp>.3?false:starsComet(c,now);
