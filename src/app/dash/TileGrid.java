@@ -254,11 +254,11 @@ public class TileGrid extends ViewGroup {
                         }
                         mode = MOVE;
                         View hv = views.get(hit.id);
-                        if (hv != null) { // lift the tile
+                        if (hv != null) { // pick the tile up: it shrinks a little, so it never grows past the edges
                             hv.bringToFront();
                             hv.setPivotX(hv.getWidth() / 2f);
                             hv.setPivotY(hv.getHeight() / 2f);
-                            hv.animate().scaleX(1.05f).scaleY(1.05f).setDuration(160).setInterpolator(ease).start();
+                            hv.animate().scaleX(0.96f).scaleY(0.96f).setDuration(160).setInterpolator(ease).start();
                         }
                         rect(hit, 0);
                         grabX = x - rf.left;
