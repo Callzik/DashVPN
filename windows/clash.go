@@ -218,4 +218,20 @@ func (c *Clash) GroupCheck(group string, timeoutMs int) map[string]int {
 	return res
 }
 
+// Totals returns the bytes downloaded and uploaded through the core since it started.
+func (c *Clash) Totals() (down, up int64, ok bool) {
+	b, err := c.call("GET", "/connections", nil, 2*time.Second)
+	if err != nil {
+		return 0, 0, false
+	}
+	var r struct {
+		Down int64 `json:"downloadTotal"`
+		Up   int64 `json:"uploadTotal"`
+	}
+	if json.Unmarshal(b, &r) != nil {
+		return 0, 0, false
+	}
+	return r.Down, r.Up, true
+}
+
 func (c *Clash) CloseAll() { _, _ = c.call("DELETE", "/connections", nil, 4*time.Second) }

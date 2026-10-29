@@ -38,6 +38,10 @@ public class MainActivity extends Activity {
     private LinearLayout tilesBox;
     private String tilesSig;
     private PowerButton power;
+    private StarField stars;
+    private FrameLayout srvFlag;
+    private LinearLayout srvPing;
+    private String srvKey = "";
     private LinearLayout updCard;
     private TextView updText, updBtn;
     private EditText subInput;
@@ -64,7 +68,8 @@ public class MainActivity extends Activity {
         root = new FrameLayout(this);
         root.setBackgroundColor(Ui.BG);
         setContentView(root);
-        root.addView(new StarField(this));
+        stars = new StarField(this);
+        root.addView(stars);
         mainView = buildMain();
         onboardingView = buildOnboarding();
         root.addView(mainView);
@@ -237,6 +242,9 @@ public class MainActivity extends Activity {
         Context c = this;
         tilesBox.removeAllViews();
         pingBtn = wlBadge = speedVal = trafficVal = ipFlag = ipText = ipCountry = srvName = srvSub = null;
+        srvFlag = null;
+        srvPing = null;
+        srvKey = "";
         View.OnLongClickListener edit = new View.OnLongClickListener() {
             @Override public boolean onLongClick(View v) {
                 startActivity(new Intent(MainActivity.this, HomeLayoutActivity.class));
@@ -325,11 +333,15 @@ public class MainActivity extends Activity {
             }
             default: { // server card
                 LinearLayout srv = Ui.row(c);
-                srv.setBackground(Ui.round(c, Ui.SURFACE, 18, Ui.LINE));
-                srv.setPadding(Ui.dp(c, 16), Ui.dp(c, 16), Ui.dp(c, 14), Ui.dp(c, 16));
+                srv.setBackground(Ui.round(c, 0xD113121A, 18, Ui.LINE));
+                srv.setPadding(Ui.dp(c, 13), Ui.dp(c, 13), Ui.dp(c, 16), Ui.dp(c, 13));
+                srvFlag = new FrameLayout(c);
+                srvFlag.setBackground(Ui.round(c, Ui.SURFACE2, 12, 0));
+                srv.addView(srvFlag, new LinearLayout.LayoutParams(Ui.dp(c, 40), Ui.dp(c, 40)));
                 LinearLayout srvText = new LinearLayout(c);
                 srvText.setOrientation(LinearLayout.VERTICAL);
-                srvName = Ui.text(c, "Автовыбор сервера", 16, Ui.FG, true);
+                srvText.setPadding(Ui.dp(c, 12), 0, Ui.dp(c, 8), 0);
+                srvName = Ui.text(c, "Авто", 16, Ui.FG, true);
                 srvName.setSingleLine(true);
                 srvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 srvSub = Ui.text(c, "", 13, Ui.MUTED, false);
@@ -338,7 +350,14 @@ public class MainActivity extends Activity {
                 srvText.addView(srvName);
                 srvText.addView(srvSub, Ui.lp(c, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 2));
                 srv.addView(srvText, Ui.weight());
-                srv.addView(Ui.text(c, "›", 24, Ui.MUTED, false));
+                srvPing = Ui.row(c);
+                srv.addView(srvPing);
+                srvPing.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        BoxVpnService s = BoxVpnService.instance;
+                        if (s != null && AppState.vpn == AppState.ON) s.pingCurrent();
+                    }
+                });
                 srv.setOnClickListener(new View.OnClickListener() {
                     @Override public void onClick(View v) { startActivity(new Intent(MainActivity.this, ServersActivity.class)); }
                 });
@@ -396,7 +415,15 @@ public class MainActivity extends Activity {
         int s = AppState.vpn;
         power.setState(s);
 
+        stars.setMode(s);
+        int[] pl = new int[2], sl = new int[2];
+        power.getLocationInWindow(pl);
+        stars.getLocationInWindow(sl);
+        if (power.getWidth() > 0) stars.setCenter(pl[0] - sl[0] + power.getWidth() / 2f, pl[1] - sl[1] + power.getHeight() / 2f);
+
         title.setTextColor(s == AppState.WAITING ? Ui.WARN : Ui.FG);
+        title.setTextSize(s == AppState.ON ? 36 : 32);
+        title.setFontFeatureSettings(s == AppState.ON ? "tnum" : null);
         subtitle.setTypeface(s == AppState.ON ? Typeface.MONOSPACE : Typeface.DEFAULT);
         switch (s) {
             case AppState.CONNECTING:
@@ -404,8 +431,9 @@ public class MainActivity extends Activity {
                 subtitle.setText(AppState.phase);
                 break;
             case AppState.ON:
-                title.setText("Подключено");
-                subtitle.setText(duration(System.currentTimeMillis() - AppState.since));
+                // the glowing planet already says "connected": the timer is the title, speed below it
+                title.setText(duration(System.currentTimeMillis() - AppState.since));
+                subtitle.setText(Stats.hasTraffic ? "↓ " + rate(Stats.downRate) + "    ↑ " + rate(Stats.upRate) : "");
                 break;
             case AppState.WAITING:
                 title.setText(AppState.wl == AppState.WL_NONET ? "Ожидание сети" : "Нет ответа");
@@ -418,7 +446,7 @@ public class MainActivity extends Activity {
                     subtitle.setText("Включится сам в " + new java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT)
                             .format(new java.util.Date(AppState.pausedUntil)));
                 } else {
-                    subtitle.setText("none".equals(net) ? "Нет сети" : "Нажмите, чтобы включить");
+                    subtitle.setText("none".equals(net) ? "Нет сети" : "");
                 }
         }
         errorText.setText(s == AppState.OFF ? AppState.error : "");
@@ -469,24 +497,41 @@ public class MainActivity extends Activity {
         wlBadge.setTextColor(wlColor);
         }
 
-        // server card
+        // server card: the server in use (or the pinned one), else "Авто"
         if (srvName == null) return;
         boolean manual = !AppState.pinned.isEmpty();
-        String grp = "auto-lte".equals(AppState.group) ? "LTE" : "основные";
-        if (on && !AppState.serverName.isEmpty()) {
-            srvName.setText(AppState.serverName);
-            srvSub.setText(AppState.switching ? "Проверка серверов…"
-                    : manual ? "Выбран вручную" : "Лучший из " + AppState.alive + " · " + grp);
-        } else if (s == AppState.CONNECTING) {
-            srvName.setText("Выбор сервера…");
-            srvSub.setText(AppState.lastServers);
-        } else if (s == AppState.WAITING) {
-            srvName.setText("Сервер не выбран");
-            srvSub.setText("Выбор после появления связи");
-        } else {
-            srvName.setText(manual ? AppState.pinned : "Автовыбор сервера");
-            srvSub.setText(manual ? "Выбран вручную" : "Самый быстрый из доступных");
+        String name = on && !AppState.serverName.isEmpty() ? AppState.serverName : manual ? AppState.pinned : "";
+        String[] fl = name.isEmpty() ? new String[]{"", ""} : ServersActivity.splitFlag(name);
+        srvName.setText(name.isEmpty() ? "Авто" : fl[1]);
+        srvSub.setText(on && AppState.switching ? "Проверка серверов…" : name.isEmpty() ? "" : manual ? "Вручную" : "Авто");
+        srvSub.setVisibility(srvSub.getText().length() > 0 ? View.VISIBLE : View.GONE);
+        int ping = on && !AppState.pingingCurrent ? AppState.ping : 0;
+        String key = name + "|" + ping + "|" + (on && AppState.pingingCurrent);
+        if (!key.equals(srvKey)) { // rebuild the flag and ping only when they change
+            srvKey = key;
+            Context c = this;
+            srvFlag.removeAllViews();
+            if (name.isEmpty()) {
+                srvFlag.addView(new IconView(c, IconView.AUTO, Ui.ACCENT), new FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.CENTER));
+            } else {
+                boolean hasFlag = !fl[0].isEmpty();
+                String letter = fl[1].trim().isEmpty() ? "?" : fl[1].trim().substring(0, 1).toUpperCase();
+                TextView f = Ui.text(c, hasFlag ? fl[0] : letter, hasFlag ? 21 : 16, Ui.MUTED, !hasFlag);
+                f.setGravity(Gravity.CENTER);
+                srvFlag.addView(f, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            }
+            srvPing.removeAllViews();
+            if (on && AppState.pingingCurrent) srvPing.addView(Ui.text(c, "…", 14, Ui.MUTED, true));
+            else if (ping != 0) srvPing.addView(ServersActivity.pingView(c, ping));
         }
+    }
+
+    /** Bytes/s for the line under the timer: "310 КБ/с", "4.2 МБ/с". */
+    private static String rate(long b) {
+        if (b < 1024) return b + " Б/с";
+        if (b < 1024 * 1024) return Math.round(b / 1024.0) + " КБ/с";
+        double m = b / (1024.0 * 1024);
+        return String.format(java.util.Locale.ROOT, m < 10 ? "%.1f МБ/с" : "%.0f МБ/с", m);
     }
 
     private void renderStats(boolean on) {

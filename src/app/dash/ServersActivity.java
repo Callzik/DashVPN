@@ -377,7 +377,7 @@ public class ServersActivity extends Activity {
     }
 
     /** Signal bars and ms in the ping colour, or a red dash when the server does not answer. */
-    private static View pingView(Context c, int p) {
+    static View pingView(Context c, int p) {
         int q = quality(p);
         int fg = p < 0 || q == 1 ? Ui.BAD : q == 2 ? Ui.WARN : GOOD;
         LinearLayout l = Ui.row(c);

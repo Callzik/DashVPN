@@ -86,6 +86,9 @@ type Core struct {
 	lastServers        string
 	pendingRetry       *time.Timer
 	crashes            []time.Time
+
+	// traffic through the tunnel, bytes per second, for the main screen
+	downRate, upRate int64
 }
 
 func NewCore(prefs *Prefs, dataDir, binDir, ruleDir string, log *Log) *Core {
@@ -261,6 +264,7 @@ func (c *Core) boot(g int) error {
 		return err
 	}
 	go c.loops(g)
+	go c.traffic(g)
 	c.mu.Lock()
 	waiting := c.gen == g && c.state == StWaiting
 	c.mu.Unlock()
@@ -1085,6 +1089,52 @@ func (c *Core) loops(g int) {
 	}
 }
 
+// traffic samples the core's byte counters once a second while the run is current.
+func (c *Core) traffic(g int) {
+	c.mu.Lock()
+	stop := c.stopCh
+	c.mu.Unlock()
+	if stop == nil {
+		return
+	}
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	defer func() {
+		c.mu.Lock()
+		if c.gen == g {
+			c.downRate, c.upRate = 0, 0
+		}
+		c.mu.Unlock()
+	}()
+	var lastD, lastU int64 = -1, -1
+	for {
+		select {
+		case <-stop:
+			return
+		case <-t.C:
+		}
+		cl := c.cl()
+		if cl == nil {
+			continue
+		}
+		d, u, ok := cl.Totals()
+		if !ok {
+			lastD, lastU = -1, -1
+			continue
+		}
+		var dr, ur int64
+		if lastD >= 0 && d >= lastD && u >= lastU {
+			dr, ur = d-lastD, u-lastU
+		}
+		lastD, lastU = d, u
+		c.mu.Lock()
+		if c.gen == g {
+			c.downRate, c.upRate = dr, ur
+		}
+		c.mu.Unlock()
+	}
+}
+
 func (c *Core) watch(g int) {
 	c.mu.Lock()
 	ok := c.gen == g && c.state == StOn && !c.switching
@@ -1418,6 +1468,8 @@ type StateView struct {
 	Summary        string `json:"summary"`
 	Version        string `json:"version"`
 	HasSubs        bool   `json:"hasSubs"`
+	Down           int64  `json:"down"`
+	Up             int64  `json:"up"`
 }
 
 func (c *Core) View() StateView {
@@ -1429,6 +1481,7 @@ func (c *Core) View() StateView {
 		HasSubs: len(c.prefs.Get().Subs) > 0}
 	if c.state == StOn {
 		v.Since = c.since.Unix()
+		v.Down, v.Up = c.downRate, c.upRate
 	}
 	if c.banner != "" && time.Since(c.bannerAt) < 7*time.Second && c.state != StOff {
 		v.Banner, v.BannerTone = c.banner, c.bannerTone
