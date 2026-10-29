@@ -91,6 +91,9 @@ public final class Changelog {
                 "Плавный редактор: рамка не наезжает на соседей и плывёт за плиткой, плитки мягко разъезжаются и меняют размер",
                 "Чище главный экран: номер версии теперь только в настройках",
         });
+        ENTRIES.put(51, new String[]{
+                "Рамка в редакторе видна целиком: левый край больше не обрезается",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
