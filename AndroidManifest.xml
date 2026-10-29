@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="app.dash"
-    android:versionCode="54"
-    android:versionName="2.8.0">
+    android:versionCode="55"
+    android:versionName="2.9.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="33" />
 
@@ -13,6 +13,8 @@
     <!-- Android 16 Live Update: the notification as a chip in the status bar and in Samsung's Now Bar -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- the lock on "only through VPN" apps comes back after a reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- list of launcher apps for "apps without VPN" -->
     <queries>
@@ -82,6 +84,14 @@
         <receiver
             android:name=".WidgetToggleReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".VpnWidget"
             android:exported="true"

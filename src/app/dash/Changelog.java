@@ -103,6 +103,9 @@ public final class Changelog {
         ENTRIES.put(54, new String[]{
                 "Остаток подписки: кольцо у заголовка «Серверы» показывает потраченный трафик и сколько дней осталось, нажатие — подробности",
         });
+        ENTRIES.put(55, new String[]{
+                "Только через VPN: выбранные приложения не выходят в интернет, пока VPN выключен (Настройки → Только через VPN)",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

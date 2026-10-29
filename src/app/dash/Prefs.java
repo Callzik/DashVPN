@@ -127,6 +127,18 @@ public final class Prefs {
         p.edit().putStringSet("excluded_apps", new java.util.HashSet<>(v)).apply();
     }
 
+    /** Apps that may reach the internet only through the VPN: while Dash is off they get no network (package names). */
+    public java.util.Set<String> lockedApps() {
+        return new java.util.HashSet<>(p.getStringSet("locked_apps", new java.util.HashSet<String>()));
+    }
+    public void lockedApps(java.util.Set<String> v) {
+        p.edit().putStringSet("locked_apps", new java.util.HashSet<>(v)).apply();
+    }
+
+    /** The service holds only the lock for those apps (VPN off): what to bring back when the system restarts it. */
+    public boolean lockIdle() { return p.getBoolean("lock_idle", false); }
+    public void lockIdle(boolean v) { p.edit().putBoolean("lock_idle", v).apply(); }
+
     /** Servers the user turned off (by name). */
     public java.util.Set<String> offServers() {
         return new java.util.HashSet<>(p.getStringSet("off_servers", new java.util.HashSet<String>()));
