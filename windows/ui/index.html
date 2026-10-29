@@ -52,6 +52,10 @@ h1{font-size:21px;font-weight:700;flex:1}
 .word{font-size:22px;font-weight:700;letter-spacing:-.4px}
 .ibtn{width:40px;height:40px;border-radius:13px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center}
 .ibtn:hover{border-color:var(--line2)}
+.ring{position:relative;width:40px;height:40px;cursor:pointer}
+.ring svg{display:block}
+.ring .tip{display:none;position:absolute;right:0;top:48px;z-index:5;white-space:nowrap;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:8px 12px;font-size:13px;line-height:1.5;color:var(--fg);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.ring.open .tip{display:block}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:10px}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:11px 14px}
 .tile .v{font-family:Consolas,"Cascadia Mono",monospace;font-size:20px;font-weight:700;margin-top:2px}
@@ -203,6 +207,7 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 <!-- servers -->
 <section class="view" id="v-servers">
   <div class="top"><button class="back" onclick="leaveServers()">←</button><h1>Серверы</h1>
+    <div class="ring" id="subring" style="display:none" onclick="event.stopPropagation();this.classList.toggle('open')"></div>
     <button class="ibtn" id="testbtn" title="Проверить пинг" onclick="api('/api/ping-all').then(loadServers)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button></div>
   <div class="scroll">
     <div class="mgroup" id="srvauto" style="margin-top:12px"></div>
@@ -388,10 +393,22 @@ function srow(s,pinned){
   const tip=[s.xhttp?'xhttp':'',s.sub].filter(Boolean).join(' · ');
   return `<div class="mrow srow${sel?' sel':''}${s.off?' off':''}" data-name="${esc(s.name)}" data-off="${s.off}" data-group="${s.group}"${tip?` title="${esc(tip)}"`:''}>${tile}
     <div class="grow b ell">${esc(title)}</div>${now?'<span class="live" title="Используется сейчас"></span>':''}${s.off?'':pingPill(s.ping)}${sel?TICK:''}</div>`}
+/* subscription orbit: arc = traffic spent, number = days left; amber when running out, red "!" when over, dotted when unlimited */
+function drawRing(g){
+  const el=$('subring');if(!g){el.style.display='none';return}
+  const col={ok:'var(--accent)',low:'var(--warn)',over:'var(--bad)',unlimited:'var(--accent)'}[g.state];
+  const R=17,L=2*Math.PI*R,open=el.classList.contains('open');
+  const arc=g.state==='unlimited'?`<circle cx="20" cy="20" r="${R}" fill="none" stroke="${col}" stroke-opacity=".45" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="0.5 5"/>`
+    :`<circle cx="20" cy="20" r="${R}" fill="none" stroke="var(--line)" stroke-width="2.5"/>`+(g.part>0?`<circle cx="20" cy="20" r="${R}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="${Math.max(1,L*g.part)} ${L}" transform="rotate(-90 20 20)"/>`:'');
+  el.innerHTML=`<svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="${R}" fill="var(--surface)"/>${arc}
+    <text x="20" y="20" dy=".35em" text-anchor="middle" font-size="${g.label.length>2?11:13}" font-weight="700" fill="${g.state==='ok'||g.state==='unlimited'?'var(--fg)':col}">${esc(g.label)}</text></svg>
+    <div class="tip">${g.lines.map(esc).join('<br>')}</div>`;
+  el.classList.toggle('open',open);el.style.display=''}
 async function loadServers(){
   const r=await api('/api/servers');const list=r.servers||[];const pinned=r.pinned||'';
   const on=S.state==='on';
   const tb=$('testbtn');tb.classList.toggle('spin',!!S.pinging);tb.style.opacity=on?1:.4;
+  drawRing(r.ring);
   $('srvauto').innerHTML=`<div class="mrow srow${pinned?'':' sel'}" onclick="pin('')"><div class="mic" style="background:#8B7CFF26">${AUTO_IC}</div>
     <div class="grow b">Авто</div>${pinned?'':TICK}</div>`;
   $('srvsearchbox').style.display=list.length>8?'':'none';$('srvclear').style.display=srvQuery?'':'none';
@@ -423,7 +440,7 @@ function openMenu(x,y,items){const m=$('menu');m.innerHTML='';
     const b=document.createElement('button');b.innerHTML=`<span class="mck">${it[2]?'✓':''}</span>${esc(it[0])}`;
     b.onclick=e=>{e.stopPropagation();m.style.display='none';it[1]()};m.appendChild(b)}
   m.style.display='block';m.style.left=Math.min(x,innerWidth-200)+'px';m.style.top=Math.min(y,innerHeight-m.offsetHeight-8)+'px'}
-document.addEventListener('click',()=>$('menu').style.display='none');
+document.addEventListener('click',()=>{$('menu').style.display='none';$('subring').classList.remove('open')});
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('.srow'))e.preventDefault()});
 
 async function loadSettings(){

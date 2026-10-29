@@ -303,10 +303,11 @@ func (c *Core) savedSubs(urls []string) []SubEntry {
 
 var httpDirect = &http.Client{Timeout: 25 * time.Second, Transport: &http.Transport{Proxy: nil}}
 
-func (c *Core) fetch(u string) (string, string, error) {
+// fetch returns the body, the profile-title and the subscription-userinfo header.
+func (c *Core) fetch(u string) (string, string, string, error) {
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	req.Header.Set("User-Agent", "v2rayNG/1.10.19")
 	req.Header.Set("Accept", "*/*")
@@ -317,20 +318,20 @@ func (c *Core) fetch(u string) (string, string, error) {
 	req.Header.Set("x-app-version", "Dash-Windows/"+Version)
 	resp, err := httpDirect.Do(req)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		return "", "", "", fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 20<<20))
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if strings.TrimSpace(string(b)) == "" {
-		return "", "", fmt.Errorf("пустой ответ")
+		return "", "", "", fmt.Errorf("пустой ответ")
 	}
-	return string(b), profileTitle(resp.Header.Get("profile-title")), nil
+	return string(b), profileTitle(resp.Header.Get("profile-title")), resp.Header.Get("subscription-userinfo"), nil
 }
 
 func profileTitle(h string) string {
@@ -373,9 +374,17 @@ func (c *Core) loadSubs(urls []string) []SubEntry {
 		wg.Add(1)
 		go func(i int, u string) {
 			defer wg.Done()
-			body, title, err := c.fetch(u)
+			body, title, info, err := c.fetch(u)
 			if title != "" {
 				c.prefs.Update(func(d *PrefsData) { d.Names[u] = title })
+			}
+			if err == nil {
+				c.prefs.Update(func(d *PrefsData) {
+					if d.Infos == nil {
+						d.Infos = map[string]string{}
+					}
+					d.Infos[u] = info
+				})
 			}
 			name := c.prefs.SubLabel(u)
 			cache := c.prefs.Cache(u)

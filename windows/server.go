@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 //go:embed ui
@@ -86,7 +87,7 @@ func (a *API) handler() http.Handler {
 	})
 	api("/api/toggle", func(w http.ResponseWriter, r *http.Request) { a.core.Toggle(); writeJSON(w, true) })
 	api("/api/servers", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"servers": a.core.Servers(), "pinned": a.prefs.Get().Pinned})
+		writeJSON(w, map[string]any{"servers": a.core.Servers(), "pinned": a.prefs.Get().Pinned, "ring": a.core.SubRing(time.Now())})
 	})
 	api("/api/pin", func(w http.ResponseWriter, r *http.Request) {
 		a.core.Pin(str(body(r)["name"]))
