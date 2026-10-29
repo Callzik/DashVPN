@@ -66,7 +66,7 @@ public final class Prefs {
         java.util.List<String> l = subUrls();
         l.remove(url);
         subUrls(l);
-        p.edit().remove("cache:" + url).remove("name:" + url).apply();
+        p.edit().remove("cache:" + url).remove("name:" + url).remove("info:" + url).apply();
     }
 
     public String subCache(String url) { return p.getString("cache:" + url, ""); }
@@ -75,6 +75,10 @@ public final class Prefs {
     /** Name the panel gave the subscription (profile-title), "" when unknown. */
     public String subName(String url) { return p.getString("name:" + url, ""); }
     public void subName(String url, String name) { p.edit().putString("name:" + url, name).apply(); }
+
+    /** The panel's subscription-userinfo header as last downloaded, "" when it sent none. */
+    public String subInfo(String url) { return p.getString("info:" + url, ""); }
+    public void subInfo(String url, String h) { p.edit().putString("info:" + url, h).apply(); }
 
     public long subUpdated() { return p.getLong("sub_updated", 0); }
     public void markSubUpdated() { p.edit().putLong("sub_updated", System.currentTimeMillis()).apply(); }

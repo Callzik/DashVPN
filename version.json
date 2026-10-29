@@ -1,13 +1,13 @@
 {
   "android": {
-    "version": "2.7.4",
-    "code": 53,
-    "url": "https://github.com/Callzik/DashVPN/releases/download/android-v2.7.4/Dash-2.7.4.apk",
-    "sha256": "6f6b4cb1ffd3e93cc2fb5d7a5fe9391be4e442b79457f26a623b01e30caf6010"
+    "version": "2.8.0",
+    "code": 54,
+    "url": "https://github.com/Callzik/DashVPN/releases/download/android-v2.8.0/Dash-2.8.0.apk",
+    "sha256": "de09a5af61dadedc4faee4aebb92c5ca35ea4ae4e7b68226262627e410eb5595"
   },
   "windows": {
-    "version": "1.9.3",
-    "url": "https://github.com/Callzik/DashVPN/releases/download/windows-v1.9.3/Dash-Windows-1.9.3.zip",
-    "sha256": "fa3717f26731eb9886c52e3f4100c965f3ed5d50107ee6048df2e3eeecfc4d1f"
+    "version": "1.10.0",
+    "url": "https://github.com/Callzik/DashVPN/releases/download/windows-v1.10.0/Dash-Windows-1.10.0.zip",
+    "sha256": "701231ceaba4b2c53872e3dc4dbdbf8d4ae6fa9109205bdac2c75b1b3b2b2779"
   }
 }

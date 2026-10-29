@@ -33,6 +33,7 @@ public class ServersActivity extends Activity {
     private Prefs prefs;
     private final List<Server> items = new ArrayList<>();
     private View test;
+    private SubRing ring;
     private LinearLayout autoBox, body;
     private View searchBox;
     private String query = "";
@@ -74,6 +75,13 @@ public class ServersActivity extends Activity {
         TextView title = Ui.text(c, "Серверы", 22, Ui.FG, true);
         title.setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 8), 0);
         top.addView(title, Ui.weight());
+        ring = new SubRing(c);
+        ring.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { showSubInfo(v); }
+        });
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44));
+        rlp.rightMargin = Ui.dp(c, 8);
+        top.addView(ring, rlp);
         FrameLayout refreshBtn = new FrameLayout(c);
         refreshBtn.setBackground(Ui.round(c, Ui.SURFACE, 14, Ui.LINE));
         refreshBtn.setForeground(ripple());
@@ -230,6 +238,7 @@ public class ServersActivity extends Activity {
         });
         boolean on = AppState.vpn == AppState.ON;
         test.setAlpha(on && !AppState.pinging ? 1f : 0.4f);
+        ring.set(SubInfo.mostUrgent(subInfos(), System.currentTimeMillis()));
         render();
     }
 
@@ -388,6 +397,108 @@ public class ServersActivity extends Activity {
         }
         l.addView(Ui.text(c, p > 0 ? String.valueOf(p) : "—", 14, fg, true));
         return l;
+    }
+
+    /** What each http subscription last reported about its traffic and end date, null where nothing. */
+    private List<SubInfo> subInfos() {
+        List<SubInfo> out = new ArrayList<>();
+        for (String url : prefs.subUrls()) if (Subs.isHttp(url)) out.add(SubInfo.parse(prefs.subInfo(url)));
+        return out;
+    }
+
+    /** A small bubble under the ring: "12 / 50 ГБ · 38 дн", one line per subscription when there are several. */
+    private void showSubInfo(View anchor) {
+        long now = System.currentTimeMillis();
+        StringBuilder sb = new StringBuilder();
+        List<String> urls = prefs.subUrls();
+        int withInfo = 0;
+        for (String url : urls) if (Subs.isHttp(url) && SubInfo.parse(prefs.subInfo(url)) != null) withInfo++;
+        for (String url : urls) {
+            if (!Subs.isHttp(url)) continue;
+            SubInfo si = SubInfo.parse(prefs.subInfo(url));
+            if (si == null) continue;
+            if (sb.length() > 0) sb.append('\n');
+            if (withInfo > 1) sb.append(Subs.label(prefs, url)).append(" · ");
+            sb.append(si.text(now));
+        }
+        if (sb.length() == 0) return;
+        Context c = this;
+        TextView t = Ui.text(c, sb.toString(), 14, Ui.FG, false);
+        t.setPadding(Ui.dp(c, 14), Ui.dp(c, 10), Ui.dp(c, 14), Ui.dp(c, 10));
+        t.setBackground(Ui.round(c, Ui.SURFACE, 14, Ui.LINE));
+        android.widget.PopupWindow pw = new android.widget.PopupWindow(t,
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        pw.setOutsideTouchable(true);
+        pw.setElevation(Ui.dp(c, 6));
+        pw.showAsDropDown(anchor, 0, Ui.dp(c, 6), Gravity.END);
+    }
+
+    /**
+     * Subscription orbit: the arc is the traffic spent, the number the days left. Accent when fine, amber when
+     * under 3 days or 10% left, red with "!" when over, dotted with ∞ when unlimited and endless. Hidden without data.
+     */
+    private static final class SubRing extends View {
+        private final Paint track = new Paint(Paint.ANTI_ALIAS_FLAG), arc = new Paint(Paint.ANTI_ALIAS_FLAG),
+                fill = new Paint(Paint.ANTI_ALIAS_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF r = new RectF();
+        private float part;
+        private String label = "";
+        private int color;
+        private boolean dotted;
+
+        SubRing(Context c) {
+            super(c);
+            float sw = Ui.dp(c, 2.5f);
+            track.setStyle(Paint.Style.STROKE);
+            track.setStrokeWidth(sw);
+            track.setColor(Ui.LINE);
+            arc.setStyle(Paint.Style.STROKE);
+            arc.setStrokeWidth(sw);
+            arc.setStrokeCap(Paint.Cap.ROUND);
+            fill.setColor(Ui.SURFACE);
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setFakeBoldText(true);
+            setVisibility(GONE);
+        }
+
+        void set(SubInfo si) {
+            if (si == null) {
+                setVisibility(GONE);
+                return;
+            }
+            long now = System.currentTimeMillis();
+            int d = si.daysLeft(now);
+            boolean over = si.over(now);
+            color = over ? Ui.BAD : si.low(now) ? Ui.WARN : Ui.ACCENT;
+            part = over ? 1f : si.usedPart();
+            dotted = !over && si.total <= 0;
+            label = over ? "!" : d >= 0 ? (d > 999 ? "999" : String.valueOf(d)) : "∞";
+            setContentDescription("Подписка: " + si.text(now));
+            setVisibility(VISIBLE);
+            invalidate();
+        }
+
+        @Override protected void onDraw(Canvas cv) {
+            float w = getWidth(), h = getHeight(), sw = arc.getStrokeWidth();
+            float rad = Math.min(w, h) / 2f - sw;
+            cv.drawCircle(w / 2, h / 2, rad, fill);
+            r.set(w / 2 - rad, h / 2 - rad, w / 2 + rad, h / 2 + rad);
+            arc.setColor(color);
+            if (dotted) {
+                arc.setAlpha(110);
+                arc.setPathEffect(new android.graphics.DashPathEffect(new float[]{sw * 0.2f, sw * 2.2f}, 0));
+                cv.drawCircle(w / 2, h / 2, rad, arc);
+                arc.setPathEffect(null);
+                arc.setAlpha(255);
+            } else {
+                cv.drawCircle(w / 2, h / 2, rad, track);
+                if (part > 0) cv.drawArc(r, -90, Math.max(4f, 360 * part), false, arc);
+            }
+            text.setColor(color == Ui.ACCENT ? Ui.FG : color);
+            text.setTextSize(label.length() > 2 ? h * 0.26f : h * 0.32f);
+            Paint.FontMetrics fm = text.getFontMetrics();
+            cv.drawText(label, w / 2, h / 2 - (fm.ascent + fm.descent) / 2, text);
+        }
     }
 
     /** Three signal bars, the first {@code level} of them lit. */

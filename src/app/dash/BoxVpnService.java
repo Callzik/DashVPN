@@ -523,9 +523,10 @@ public class BoxVpnService extends VpnService {
                     Subs.Entry e = new Subs.Entry();
                     e.url = url;
                     try {
-                        String[] title = new String[1];
+                        String[] title = new String[2];
                         String body = fetch(url, title);
                         if (title[0] != null && !title[0].isEmpty()) prefs.subName(url, title[0]);
+                        prefs.subInfo(url, title[1] == null ? "" : title[1]);
                         e.name = Subs.label(prefs, url);
                         boolean stub = stubReason(SubParser.parse(body, new ArrayList<String>())) != null;
                         String cache = prefs.subCache(url);
@@ -2036,6 +2037,7 @@ public class BoxVpnService extends VpnService {
             String body = Clash.read(c.getInputStream());
             if (body.trim().isEmpty()) throw new Exception("пустой ответ");
             title[0] = profileTitle(c.getHeaderField("profile-title"));
+            if (title.length > 1) title[1] = c.getHeaderField("subscription-userinfo");
             return body;
         } finally {
             c.disconnect();
