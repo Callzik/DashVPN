@@ -104,13 +104,7 @@ public class MainActivity extends Activity {
         java.util.List<String> lines = Changelog.since(seen, code);
         prefs.lastSeenVersion(code);
         if (lines.isEmpty()) return;
-        StringBuilder sb = new StringBuilder();
-        for (String l : lines) sb.append("•  ").append(l).append("\n\n");
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Что нового")
-                .setMessage(sb.toString().trim())
-                .setPositiveButton("Понятно", null)
-                .show();
+        WhatsNew.show(this, versionName(), lines);
     }
 
     @Override protected void onNewIntent(Intent intent) {

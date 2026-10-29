@@ -9,7 +9,7 @@ import java.util.Random;
 
 /** Star background: still when off, a warp jump while connecting, a slow drift and a nebula while connected. */
 public class StarField extends View {
-    private float[] x, y, r, a, ph, z;
+    private float[] x, y, r, a, ph, z, age;
     private boolean[] tw, tint;
     private int lastW, lastH;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -106,7 +106,7 @@ public class StarField extends View {
         Random rnd = new Random(7);
         float dp = Ui.dp(getContext(), 1);
         int n = Math.max(40, (int) (w * h / (dp * dp) / 1800f));
-        x = new float[n]; y = new float[n]; r = new float[n]; a = new float[n]; ph = new float[n]; z = new float[n];
+        x = new float[n]; y = new float[n]; r = new float[n]; a = new float[n]; ph = new float[n]; z = new float[n]; age = new float[n];
         tw = new boolean[n]; tint = new boolean[n];
         for (int i = 0; i < n; i++) {
             x[i] = rnd.nextFloat() * w;
@@ -118,6 +118,7 @@ public class StarField extends View {
             tw[i] = rnd.nextFloat() < 0.25f;
             tint[i] = rnd.nextFloat() < 0.2f;
             z[i] = 0.4f + rnd.nextFloat() * 0.6f;
+            age[i] = 1f;
         }
     }
 
@@ -152,22 +153,26 @@ public class StarField extends View {
             y[i] += vy * dt;
             float m = 60 * dp;
             if (x[i] < -m || x[i] > w + m || y[i] < -m || y[i] > h + m) {
-                if (warp > 0.3f) { // a new star appears near the centre
-                    double ang = rr.nextFloat() * 6.283, rad = (20 + rr.nextFloat() * 90) * dp;
+                // a star that left the screen comes back as a new one that fades in: near the centre
+                // (under the button) during the jump, anywhere otherwise
+                if (warp > 0.05f) {
+                    double ang = rr.nextFloat() * 6.283, rad = (30 + rr.nextFloat() * 60) * dp;
                     x[i] = ccx + (float) (Math.cos(ang) * rad);
                     y[i] = ccy + (float) (Math.sin(ang) * rad);
                 } else {
-                    x[i] = ((x[i] + m) % (w + 2 * m) + w + 2 * m) % (w + 2 * m) - m;
-                    y[i] = ((y[i] + m) % (h + 2 * m) + h + 2 * m) % (h + 2 * m) - m;
+                    x[i] = rr.nextFloat() * w;
+                    y[i] = rr.nextFloat() * h;
                 }
+                age[i] = 0;
             }
-            float al = a[i] * dim;
+            age[i] = Math.min(1f, age[i] + dt);
+            float al = a[i] * dim * Math.min(1f, age[i] / 0.5f);
             if (tw[i]) {
                 al *= 0.45f + 0.55f * (float) (0.5 + 0.5 * Math.sin(t * 0.9 + ph[i]));
             }
             int base = tint[i] ? 0xC4BCFF : 0xFFFFFF;
             int col = (Math.round(al * 255) << 24) | base;
-            float sp = (float) Math.hypot(vx, vy), len = Math.min(70 * dp, sp * 0.12f);
+            float sp = (float) Math.hypot(vx, vy), len = Math.min(70 * dp, sp * 0.12f) * Math.min(1f, age[i] / 0.35f);
             if (len > 1.2f * dp) {
                 tailP.setShader(null);
                 tailP.setColor(col);
