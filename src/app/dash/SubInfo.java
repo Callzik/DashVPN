@@ -59,6 +59,20 @@ public final class SubInfo {
         return (d >= 0 && d < 3) || (total > 0 && total - used < total / 10);
     }
 
+    /** 3, 2 or 1 while that many days are left (rounded up) for a reminder, else 0. */
+    public int remindDay(long nowMs) {
+        if (expire == 0 || over(nowMs)) return 0;
+        int d = daysLeft(nowMs);
+        return d >= 1 && d <= 3 ? d : 0;
+    }
+
+    /** "1 день", "2 дня", "5 дней". */
+    public static String days(int n) {
+        int m = n % 100, k = n % 10;
+        String w = m >= 11 && m <= 14 ? "дней" : k == 1 ? "день" : k >= 2 && k <= 4 ? "дня" : "дней";
+        return n + " " + w;
+    }
+
     /** "12 / 50 ГБ · 38 дн", "∞ · 120 дн", "закончилась". */
     public String text(long nowMs) {
         if (over(nowMs)) return "закончилась";

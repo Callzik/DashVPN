@@ -80,6 +80,62 @@ func (s *SubInfo) Low(now time.Time) bool {
 	return (d >= 0 && d < 3) || (s.Total > 0 && s.Total-s.Used < s.Total/10)
 }
 
+// RemindDay is 3, 2 or 1 while that many days are left (rounded up) for a reminder, else 0.
+func (s *SubInfo) RemindDay(now time.Time) int {
+	if s.Expire == 0 || s.Over(now) {
+		return 0
+	}
+	if d := s.DaysLeft(now); d >= 1 && d <= 3 {
+		return d
+	}
+	return 0
+}
+
+// days: "1 день", "2 дня", "5 дней".
+func days(n int) string {
+	m, k := n%100, n%10
+	w := "дней"
+	switch {
+	case m >= 11 && m <= 14:
+	case k == 1:
+		w = "день"
+	case k >= 2 && k <= 4:
+		w = "дня"
+	}
+	return fmt.Sprintf("%d %s", n, w)
+}
+
+// remind shows one notification each at 3, 2 and 1 days before a subscription ends.
+// The key holds the end date, so a renewed subscription reminds again.
+func (c *Core) remind(now time.Time) {
+	notify := c.Notify
+	if notify == nil {
+		return
+	}
+	d := c.prefs.Get()
+	for _, u := range d.Subs {
+		si := ParseSubInfo(d.Infos[u])
+		if si == nil {
+			continue
+		}
+		n := si.RemindDay(now)
+		if n == 0 {
+			continue
+		}
+		key := fmt.Sprintf("%d:%d", si.Expire, n)
+		if d.Reminded[u] == key {
+			continue
+		}
+		c.prefs.Update(func(p *PrefsData) {
+			if p.Reminded == nil {
+				p.Reminded = map[string]string{}
+			}
+			p.Reminded[u] = key
+		})
+		notify(c.prefs.SubLabel(u)+" — осталось "+days(n), si.Text(now))
+	}
+}
+
 // Text: "12 / 50 ГБ · 38 дн", "∞ · 120 дн", "закончилась".
 func (s *SubInfo) Text(now time.Time) string {
 	if s.Over(now) {

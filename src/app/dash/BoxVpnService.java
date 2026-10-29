@@ -568,6 +568,7 @@ public class BoxVpnService extends VpnService {
         synchronized (out) {
             for (String u : urls) for (Subs.Entry e : out) if (e.url.equals(u)) { sorted.add(e); break; }
         }
+        SubReminder.check(this, prefs); // fresh end dates
         return sorted;
     }
 
@@ -1220,6 +1221,7 @@ public class BoxVpnService extends VpnService {
 
     private void checkSub() throws Exception {
         if (!running) return;
+        SubReminder.check(this, prefs);
         if (System.currentTimeMillis() - prefs.subUpdated() < SUB_REFRESH_MS) return;
         List<String> urls = prefs.subUrls();
         boolean anyHttp = false;

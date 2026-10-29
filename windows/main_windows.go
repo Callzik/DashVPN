@@ -208,6 +208,7 @@ func main() {
 	}
 	w.SetSize(440, 820, webview2.HintMin)
 	tr := newTray(uintptr(w.Window()), app, app.API.quit)
+	app.Core.Notify = tr.Notify
 	if hidden {
 		procShowWindow.Call(uintptr(w.Window()), swHide) // started with Windows: stay in the tray
 	}

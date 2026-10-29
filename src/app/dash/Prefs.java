@@ -66,7 +66,7 @@ public final class Prefs {
         java.util.List<String> l = subUrls();
         l.remove(url);
         subUrls(l);
-        p.edit().remove("cache:" + url).remove("name:" + url).remove("info:" + url).apply();
+        p.edit().remove("cache:" + url).remove("name:" + url).remove("info:" + url).remove("remind:" + url).apply();
     }
 
     public String subCache(String url) { return p.getString("cache:" + url, ""); }
@@ -81,6 +81,10 @@ public final class Prefs {
     /** False until a download made by 2.8.0 or newer has looked for the header. */
     public boolean hasSubInfo(String url) { return p.contains("info:" + url); }
     public void subInfo(String url, String h) { p.edit().putString("info:" + url, h).apply(); }
+
+    /** "expire:days" of the last end-of-subscription reminder shown. */
+    public String subReminded(String url) { return p.getString("remind:" + url, ""); }
+    public void subReminded(String url, String key) { p.edit().putString("remind:" + url, key).apply(); }
 
     public long subUpdated() { return p.getLong("sub_updated", 0); }
     public void markSubUpdated() { p.edit().putLong("sub_updated", System.currentTimeMillis()).apply(); }

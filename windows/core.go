@@ -31,6 +31,9 @@ const (
 
 // Core runs the cores and does what the Android BoxVpnService does: subscriptions, auto choice, watchdog.
 type Core struct {
+	// Notify shows a system notification (the tray balloon on Windows); nil means none.
+	Notify func(title, text string)
+
 	mu      sync.Mutex
 	prefs   *Prefs
 	dataDir string
@@ -415,6 +418,7 @@ func (c *Core) loadSubs(urls []string) []SubEntry {
 		}(i, u)
 	}
 	wg.Wait()
+	c.remind(time.Now()) // fresh end dates
 	var out []SubEntry
 	for _, e := range res {
 		if e != nil {
@@ -1285,6 +1289,7 @@ func (c *Core) watchPinned(g int, tag string) {
 }
 
 func (c *Core) checkSub(g int) {
+	c.remind(time.Now())
 	if !c.current(g) || time.Since(time.Unix(c.prefs.Get().SubUpdated, 0)) < subRefresh {
 		return
 	}

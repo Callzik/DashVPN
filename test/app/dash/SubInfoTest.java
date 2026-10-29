@@ -33,6 +33,14 @@ public final class SubInfoTest {
         check(SubInfo.parse("download=3; total=" + GB).text(NOW).equals("0 / 1 ГБ"), "tiny use");
         check("1.5".equals(SubInfo.parse("download=" + (3 * GB / 2) + "; total=" + 2 * GB).text(NOW).split(" ")[0]), "fraction GB");
 
+        long e3 = NOW / 1000 + 3 * 86400 - 60;
+        check(SubInfo.parse("total=0; expire=" + e3).remindDay(NOW) == 3, "remind at 3");
+        check(SubInfo.parse("total=0; expire=" + (NOW / 1000 + 86400 + 60)).remindDay(NOW) == 2, "a day and a minute is 2");
+        check(SubInfo.parse("total=0; expire=" + (NOW / 1000 + 600)).remindDay(NOW) == 1, "remind at 1");
+        check(SubInfo.parse("total=0; expire=" + (NOW / 1000 + 5 * 86400)).remindDay(NOW) == 0, "too early");
+        check(old.remindDay(NOW) == 0 && low.remindDay(NOW) == 0, "over or no end date");
+        check(SubInfo.days(1).equals("1 день") && SubInfo.days(2).equals("2 дня") && SubInfo.days(5).equals("5 дней")
+                && SubInfo.days(11).equals("11 дней") && SubInfo.days(21).equals("21 день"), "plural");
         System.out.println("SubInfoTest: ok");
     }
 
