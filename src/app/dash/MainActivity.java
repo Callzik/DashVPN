@@ -169,7 +169,7 @@ public class MainActivity extends Activity {
         word.setLetterSpacing(-0.02f);
         word.setPadding(Ui.dp(c, 10), 0, Ui.dp(c, 8), 0);
         top.addView(word);
-        netChip = Ui.text(c, "v" + versionName(), 12, Ui.MUTED, false);
+        netChip = Ui.text(c, "", 12, Ui.MUTED, false); // version lives in Settings only
         top.addView(netChip, Ui.weight());
         FrameLayout settings = new FrameLayout(c);
         settings.setBackground(Ui.round(c, Ui.SURFACE, 14, Ui.LINE));
@@ -275,7 +275,15 @@ public class MainActivity extends Activity {
                 render();
             }
             @Override public void editState(boolean edit, String selected) {
-                editBar.setVisibility(edit ? View.VISIBLE : View.GONE);
+                if (edit && editBar.getVisibility() != View.VISIBLE) { // slide in
+                    editBar.setVisibility(View.VISIBLE);
+                    editBar.setAlpha(0f);
+                    editBar.setTranslationY(Ui.dp(MainActivity.this, 10));
+                    editBar.animate().alpha(1f).translationY(0).setDuration(220)
+                            .setInterpolator(new android.view.animation.DecelerateInterpolator(1.8f)).start();
+                } else if (!edit) {
+                    editBar.setVisibility(View.GONE);
+                }
                 editRemove.setEnabled(selected != null);
                 editRemove.setAlpha(selected != null ? 1f : 0.4f);
                 boolean hidden = false;
@@ -284,7 +292,12 @@ public class MainActivity extends Activity {
                 editAdd.setAlpha(hidden ? 1f : 0.4f);
             }
         });
-        col.addView(grid, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
+        LinearLayout.LayoutParams gp = Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10);
+        int pad = TileGrid.pad(c); // the grid's own padding holds the edit frame: pull it out so tiles line up
+        gp.leftMargin = gp.rightMargin = -pad;
+        gp.topMargin -= pad;
+        gp.bottomMargin = -pad;
+        col.addView(grid, gp);
         rebuildTiles();
 
         return sv;

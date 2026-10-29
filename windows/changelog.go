@@ -57,6 +57,9 @@ var changelog = map[string][]string{
 	"1.9.2": {
 		"Плоская кнопка: при подключении снова ровный фиолетовый круг со свечением, без объёма",
 	},
+	"1.9.3": {
+		"Чище главный экран: номер версии теперь только в настройках",
+	},
 }
 
 // whatsNew lists the entries newer than seen up to the running version, oldest first.

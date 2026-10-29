@@ -179,7 +179,7 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 <canvas id="stars"></canvas><div id="nebula"></div>
 <section class="view" id="v-main">
   <div class="top">
-    <div class="brand"><svg width="28" height="28" viewBox="0 0 180 180"><defs><linearGradient id="lt" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#8B7CFF" stop-opacity="0"/><stop offset="1" stop-color="#8B7CFF" stop-opacity=".9"/></linearGradient><radialGradient id="lg" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#8B7CFF" stop-opacity=".55"/><stop offset="1" stop-color="#8B7CFF" stop-opacity="0"/></radialGradient><radialGradient id="lb" cx=".38" cy=".36" r=".7"><stop offset="0" stop-color="#fff"/><stop offset=".35" stop-color="#8B7CFF"/><stop offset="1" stop-color="#4B3BC9"/></radialGradient></defs><rect width="180" height="180" rx="42" fill="#17151F"/><path d="M26 150 L106 70 L120 84 Z" fill="url(#lt)"/><path d="M44 154 L110 88 L116 94 Z" fill="url(#lt)" opacity=".6"/><circle cx="120" cy="62" r="44" fill="url(#lg)"/><circle cx="120" cy="62" r="24" fill="url(#lb)"/></svg><span class="word">dash</span><span class="m" id="ver" style="font-size:12px"></span></div>
+    <div class="brand"><svg width="28" height="28" viewBox="0 0 180 180"><defs><linearGradient id="lt" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#8B7CFF" stop-opacity="0"/><stop offset="1" stop-color="#8B7CFF" stop-opacity=".9"/></linearGradient><radialGradient id="lg" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#8B7CFF" stop-opacity=".55"/><stop offset="1" stop-color="#8B7CFF" stop-opacity="0"/></radialGradient><radialGradient id="lb" cx=".38" cy=".36" r=".7"><stop offset="0" stop-color="#fff"/><stop offset=".35" stop-color="#8B7CFF"/><stop offset="1" stop-color="#4B3BC9"/></radialGradient></defs><rect width="180" height="180" rx="42" fill="#17151F"/><path d="M26 150 L106 70 L120 84 Z" fill="url(#lt)"/><path d="M44 154 L110 88 L116 94 Z" fill="url(#lt)" opacity=".6"/><circle cx="120" cy="62" r="44" fill="url(#lg)"/><circle cx="120" cy="62" r="24" fill="url(#lb)"/></svg><span class="word">dash</span></div>
     <button class="ibtn" onclick="show('settings')" title="Настройки"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
   </div>
   <div class="hero">
@@ -337,7 +337,7 @@ async function poll(){
   const ub=$('upd');ub.style.display=U.version?'':'none';
   if(U.version){$('updtext').textContent=U.progress===101?'Установка '+U.version+'…':U.progress>=0?'Загрузка '+U.version+' · '+U.progress+'%':U.error||('Доступна версия '+U.version);
     $('updbtn').style.display=U.progress>=0?'none':'';$('updbtn').textContent=U.error?'Ещё раз':'Обновить'}
-  $('ver').textContent='v'+S.version;$('ver2').textContent='версия '+S.version;$('ver3').textContent='Dash '+S.version;
+  $('ver2').textContent='версия '+S.version;$('ver3').textContent='Dash '+S.version;
   UPD=U;$('updstate').textContent=U.version?(U.progress===101?'Установка…':U.progress>=0?'Загрузка · '+U.progress+'%':U.error||'Доступна версия '+U.version):'Установлена последняя версия';
   $('updbtn2').textContent=U.version&&U.progress<0?'Обновить':'Проверить';$('updbtn2').style.opacity=U.progress>=0?.5:1;
   if(!S.hasSubs && view!=='onb'){show('onb');return}

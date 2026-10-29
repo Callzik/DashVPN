@@ -39,8 +39,14 @@ public class TileGrid extends ViewGroup {
     private final int gap, rowH, handle;
     private final Paint frame = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ghost = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint outline = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rf = new RectF();
+    // the frame glides to the picked tile and fades in; null = not shown yet
+    private RectF frameAt;
+    private float frameAlpha;
+    private long lastFrame;
+    private final android.view.animation.Interpolator ease = new android.view.animation.DecelerateInterpolator(1.8f);
+    // tiles rebuilt for a new size grow or shrink from their old size, anchored at this corner
+    private final Map<String, float[]> grow = new HashMap<>();
 
     // gesture
     private static final int NONE = 0, MOVE = 1, RESIZE = 2;
@@ -55,6 +61,9 @@ public class TileGrid extends ViewGroup {
         gap = Ui.dp(c, 10);
         rowH = Ui.dp(c, 68);
         handle = Ui.dp(c, 30);
+        // room around the tiles for the frame; the parent pulls the grid out by the same amount
+        int pad = pad(c);
+        setPadding(pad, pad, pad, pad);
         setWillNotDraw(false);
         setClipChildren(false);
         frame.setStyle(Paint.Style.STROKE);
@@ -65,10 +74,9 @@ public class TileGrid extends ViewGroup {
         ghost.setStrokeWidth(Ui.dp(c, 1.5f));
         ghost.setColor(0x998B7CFF);
         ghost.setPathEffect(new DashPathEffect(new float[]{Ui.dp(c, 6), Ui.dp(c, 5)}, 0));
-        outline.setStyle(Paint.Style.STROKE);
-        outline.setStrokeWidth(Ui.dp(c, 1.5f));
-        outline.setColor(0x558B7CFF);
     }
+
+    static int pad(Context c) { return Ui.dp(c, 9); }
 
     void setItems(List<Tiles.Item> list) {
         items = list;
@@ -83,7 +91,9 @@ public class TileGrid extends ViewGroup {
         edit = on;
         sel = on ? select : null;
         for (View v : views.values()) v.setEnabled(!on);
+        frameAt = null;
         host.editState(edit, sel);
+        requestLayout();
         invalidate();
     }
 
@@ -123,7 +133,13 @@ public class TileGrid extends ViewGroup {
                 continue;
             }
             if (v == null || all || !size.equals(sizes.get(it.id))) {
-                if (v != null) removeView(v);
+                if (v != null) {
+                    if (!all && v.getWidth() > 0) { // remember where it was to grow from there
+                        boolean right = mode == RESIZE && (corner & 1) == 0, bottom = mode == RESIZE && (corner & 2) == 0;
+                        grow.put(it.id, new float[]{v.getLeft(), v.getTop(), v.getWidth(), v.getHeight(), right ? 1 : 0, bottom ? 1 : 0});
+                    }
+                    removeView(v);
+                }
                 v = host.make(it);
                 v.setEnabled(!edit);
                 views.put(it.id, v);
@@ -135,15 +151,15 @@ public class TileGrid extends ViewGroup {
         invalidate();
     }
 
-    private int cellW() { return (getWidth() - gap * (Tiles.COLS - 1)) / Tiles.COLS; }
+    private int cellW() { return (getWidth() - getPaddingLeft() - getPaddingRight() - gap * (Tiles.COLS - 1)) / Tiles.COLS; }
 
     private float colX(int c) { return getPaddingLeft() + c * (cellW() + gap); }
 
-    private float rowY(int r) { return r * (rowH + gap); }
+    private float rowY(int r) { return getPaddingTop() + r * (rowH + gap); }
 
     @Override protected void onMeasure(int ws, int hs) {
         int w = MeasureSpec.getSize(ws);
-        int cw = (w - gap * (Tiles.COLS - 1)) / Tiles.COLS;
+        int cw = (w - getPaddingLeft() - getPaddingRight() - gap * (Tiles.COLS - 1)) / Tiles.COLS;
         int rows = Tiles.rows(items);
         for (Tiles.Item it : items) {
             View v = views.get(it.id);
@@ -153,7 +169,7 @@ public class TileGrid extends ViewGroup {
         }
         // in edit mode one spare row below, so a tile can be dropped under the others
         int r = rows + (edit ? 1 : 0);
-        setMeasuredDimension(w, r == 0 ? 0 : r * rowH + (r - 1) * gap);
+        setMeasuredDimension(w, r == 0 ? 0 : r * rowH + (r - 1) * gap + getPaddingTop() + getPaddingBottom());
     }
 
     @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
@@ -171,50 +187,70 @@ public class TileGrid extends ViewGroup {
             } else if (had && (ox != x || oy != y)) { // other tiles slide to their new place
                 v.setTranslationX(v.getTranslationX() + ox - x);
                 v.setTranslationY(v.getTranslationY() + oy - y);
-                v.animate().translationX(0).translationY(0).setDuration(180).start();
+                v.animate().translationX(0).translationY(0).setDuration(280).setInterpolator(ease).start();
+            }
+            float[] g = grow.remove(it.id);
+            if (g != null && v.getMeasuredWidth() > 0) { // resized: grow from the old size at the anchored corner
+                float nw = v.getMeasuredWidth(), nh = v.getMeasuredHeight();
+                v.setPivotX(g[4] == 1 ? nw : 0);
+                v.setPivotY(g[5] == 1 ? nh : 0);
+                v.setScaleX(g[2] / nw);
+                v.setScaleY(g[3] / nh);
+                v.setAlpha(0.6f);
+                v.animate().scaleX(1).scaleY(1).alpha(1).setDuration(220).setInterpolator(ease).start();
             }
         }
     }
 
     @Override protected void dispatchDraw(Canvas c) {
-        if (edit) {
-            float rad = Ui.dp(getContext(), 16);
-            for (Tiles.Item it : items) {
-                if (!it.on || it.id.equals(sel)) continue;
-                rect(it, 0);
-                c.drawRoundRect(rf, rad, rad, outline);
-            }
-            Tiles.Item s = sel == null ? null : Tiles.find(items, sel);
-            if (s != null && mode == MOVE) { // where the tile lands
-                rect(s, 0);
-                c.drawRoundRect(rf, rad, rad, ghost);
-            }
+        float rad = Ui.dp(getContext(), 16);
+        Tiles.Item s = edit && sel != null ? Tiles.find(items, sel) : null;
+        if (s != null && mode == MOVE) { // where the tile lands
+            rect(s, 0);
+            c.drawRoundRect(rf, rad, rad, ghost);
         }
         super.dispatchDraw(c);
-        if (edit && sel != null && mode != MOVE) {
-            Tiles.Item s = Tiles.find(items, sel);
-            if (s != null) drawFrame(c, s);
+        // the frame glides after the picked tile and fades in and out
+        long now = android.os.SystemClock.uptimeMillis();
+        float dt = lastFrame == 0 ? 16 : Math.min(48, now - lastFrame);
+        lastFrame = now;
+        boolean show = s != null && mode != MOVE;
+        float k = 1f - (float) Math.exp(-dt / 55f);
+        frameAlpha += ((show ? 1f : 0f) - frameAlpha) * k;
+        if (show) {
+            rect(s, Ui.dp(getContext(), 5));
+            if (frameAt == null) frameAt = new RectF(rf);
+            frameAt.left += (rf.left - frameAt.left) * k;
+            frameAt.top += (rf.top - frameAt.top) * k;
+            frameAt.right += (rf.right - frameAt.right) * k;
+            frameAt.bottom += (rf.bottom - frameAt.bottom) * k;
         }
+        if (frameAt != null && frameAlpha > 0.01f) drawFrame(c, frameAt, frameAlpha);
+        boolean moving = frameAt != null && (Math.abs(frameAlpha - (show ? 1 : 0)) > 0.01f
+                || show && (Math.abs(frameAt.left - rf.left) > 0.5f || Math.abs(frameAt.top - rf.top) > 0.5f
+                || Math.abs(frameAt.right - rf.right) > 0.5f || Math.abs(frameAt.bottom - rf.bottom) > 0.5f));
+        if (moving) postInvalidateOnAnimation();
+        else lastFrame = 0;
+        if (!show && frameAlpha <= 0.01f) frameAt = null;
     }
 
     /** Corner brackets around the picked tile, like the One UI widget frame. */
-    private void drawFrame(Canvas c, Tiles.Item s) {
-        float o = Ui.dp(getContext(), 7), len = Ui.dp(getContext(), 18), cr = Ui.dp(getContext(), 10);
-        rect(s, o);
-        frame.setStrokeWidth(Ui.dp(getContext(), 1.5f));
-        frame.setAlpha(110);
-        c.drawRoundRect(rf, cr + o, cr + o, frame);
-        frame.setStrokeWidth(Ui.dp(getContext(), 4));
-        frame.setAlpha(255);
-        float L = rf.left, T = rf.top, R = rf.right, B = rf.bottom;
+    private void drawFrame(Canvas c, RectF r, float alpha) {
+        float len = Ui.dp(getContext(), 16), cr = Ui.dp(getContext(), 14);
+        frame.setStrokeWidth(Ui.dp(getContext(), 1));
+        frame.setAlpha(Math.round(90 * alpha));
+        c.drawRoundRect(r, cr, cr, frame);
+        frame.setStrokeWidth(Ui.dp(getContext(), 3));
+        frame.setAlpha(Math.round(255 * alpha));
+        float L = r.left, T = r.top, R = r.right, B = r.bottom;
         android.graphics.Path p = new android.graphics.Path();
         float[][] cs = {{L, T, 1, 1}, {R, T, -1, 1}, {L, B, 1, -1}, {R, B, -1, -1}};
-        for (float[] k : cs) {
+        for (float[] q : cs) {
             p.reset();
-            p.moveTo(k[0], k[1] + k[3] * len);
-            p.lineTo(k[0], k[1] + k[3] * cr);
-            p.quadTo(k[0], k[1], k[0] + k[2] * cr, k[1]);
-            p.lineTo(k[0] + k[2] * len, k[1]);
+            p.moveTo(q[0], q[1] + q[3] * (cr + len * 0.6f));
+            p.lineTo(q[0], q[1] + q[3] * cr);
+            p.quadTo(q[0], q[1], q[0] + q[2] * cr, q[1]);
+            p.lineTo(q[0] + q[2] * (cr + len * 0.6f), q[1]);
             c.drawPath(p, frame);
         }
     }
@@ -240,7 +276,7 @@ public class TileGrid extends ViewGroup {
                 mode = NONE;
                 Tiles.Item s = sel == null ? null : Tiles.find(items, sel);
                 if (s != null) {
-                    rect(s, Ui.dp(getContext(), 7));
+                    rect(s, Ui.dp(getContext(), 5));
                     float[][] cs = {{rf.left, rf.top}, {rf.right, rf.top}, {rf.left, rf.bottom}, {rf.right, rf.bottom}};
                     for (int i = 0; i < 4; i++) {
                         if (Math.abs(x - cs[i][0]) < handle && Math.abs(y - cs[i][1]) < handle) {
@@ -258,6 +294,13 @@ public class TileGrid extends ViewGroup {
                             host.editState(true, sel);
                         }
                         mode = MOVE;
+                        View hv = views.get(hit.id);
+                        if (hv != null) { // lift the tile
+                            hv.bringToFront();
+                            hv.setPivotX(hv.getWidth() / 2f);
+                            hv.setPivotY(hv.getHeight() / 2f);
+                            hv.animate().scaleX(1.05f).scaleY(1.05f).setDuration(160).setInterpolator(ease).start();
+                        }
                         rect(hit, 0);
                         grabX = x - rf.left;
                         grabY = y - rf.top;
@@ -283,7 +326,8 @@ public class TileGrid extends ViewGroup {
             case MotionEvent.ACTION_CANCEL: {
                 if (mode == MOVE) {
                     View v = views.get(sel);
-                    if (v != null) v.animate().translationX(0).translationY(0).setDuration(150).start();
+                    if (v != null) v.animate().translationX(0).translationY(0).scaleX(1).scaleY(1)
+                            .setDuration(260).setInterpolator(ease).start();
                 }
                 if (mode != NONE) Tiles.settle(items, null);
                 boolean any = mode != NONE && !same(before, items);
