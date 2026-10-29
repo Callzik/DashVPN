@@ -80,6 +80,9 @@ public final class Changelog {
         ENTRIES.put(47, new String[]{
                 "Плоская кнопка: при подключении снова ровный фиолетовый круг со свечением, без объёма",
         });
+        ENTRIES.put(48, new String[]{
+                "Один пинг на экране: плитка «Пинг» убрана, пинг в карточке сервера, нажатие на него перемеряет",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
