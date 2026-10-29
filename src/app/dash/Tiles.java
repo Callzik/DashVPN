@@ -7,8 +7,9 @@ import java.util.List;
 final class Tiles {
     private Tiles() {}
 
-    static final String PING = "ping", WL = "wl", SPEED = "speed", TRAFFIC = "traffic", IP = "ip", SERVER = "server";
-    static final String[] ALL = {PING, WL, SPEED, TRAFFIC, IP, SERVER};
+    static final String WL = "wl", SPEED = "speed", TRAFFIC = "traffic", IP = "ip", SERVER = "server";
+    // the ping tile is gone: ping sits in the server card; a saved "ping" is skipped as unknown
+    static final String[] ALL = {WL, SPEED, TRAFFIC, IP, SERVER};
 
     static final class Item {
         final String id;
@@ -18,7 +19,6 @@ final class Tiles {
 
     static String title(String id) {
         switch (id) {
-            case PING: return "Пинг";
             case WL: return "Белые списки";
             case SPEED: return "Скорость";
             case TRAFFIC: return "Трафик";
@@ -30,7 +30,6 @@ final class Tiles {
 
     static String hint(String id) {
         switch (id) {
-            case PING: return "Задержка до сервера, нажатие — перемерить";
             case WL: return "Включил ли оператор белые списки";
             case SPEED: return "Текущая скорость загрузки и отдачи";
             case TRAFFIC: return "Сколько скачано и отправлено за подключение";

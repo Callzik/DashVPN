@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
     private FrameLayout root;
     private View mainView, onboardingView;
 
-    private TextView netChip, title, subtitle, banner, wlBadge, srvName, srvSub, srvBadge, pingBtn, errorText;
+    private TextView netChip, title, subtitle, banner, wlBadge, srvName, srvSub, srvBadge, errorText;
     private TextView speedVal, trafficVal, ipFlag, ipText, ipCountry;
     private LinearLayout tilesBox;
     private String tilesSig;
@@ -235,7 +235,7 @@ public class MainActivity extends Activity {
         tilesSig = sig;
         Context c = this;
         tilesBox.removeAllViews();
-        pingBtn = wlBadge = speedVal = trafficVal = ipFlag = ipText = ipCountry = srvName = srvSub = null;
+        wlBadge = speedVal = trafficVal = ipFlag = ipText = ipCountry = srvName = srvSub = null;
         srvFlag = null;
         srvPing = null;
         srvKey = "";
@@ -270,17 +270,6 @@ public class MainActivity extends Activity {
     private View makeTile(String id) {
         Context c = this;
         switch (id) {
-            case Tiles.PING: {
-                LinearLayout t = statTile("Пинг, мс");
-                pingBtn = statValue(t, true);
-                t.setOnClickListener(new View.OnClickListener() {
-                    @Override public void onClick(View v) {
-                        BoxVpnService s = BoxVpnService.instance;
-                        if (s != null && AppState.vpn == AppState.ON) s.pingCurrent();
-                    }
-                });
-                return t;
-            }
             case Tiles.WL: {
                 LinearLayout t = statTile("Белые списки");
                 wlBadge = statValue(t, false);
@@ -471,13 +460,6 @@ public class MainActivity extends Activity {
         boolean on = s == AppState.ON;
         Stats.tick();
         renderStats(on);
-
-        // tile: ping
-        if (pingBtn != null) {
-        pingBtn.setText(!on ? "—" : AppState.pingingCurrent ? "…" : AppState.ping > 0 ? String.valueOf(AppState.ping) : "—");
-        pingBtn.setTextColor(!on || AppState.pingingCurrent || AppState.ping <= 0 ? Ui.FG
-                : AppState.ping < 300 ? Ui.ACCENT : AppState.ping < 400 ? Ui.WARN : Ui.BAD);
-        }
 
         // tile: white lists
         if (wlBadge != null) {
