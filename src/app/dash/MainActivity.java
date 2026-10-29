@@ -575,8 +575,10 @@ public class MainActivity extends Activity {
             updText.setText(pr == 101 ? "Установка " + Updater.newVersion + "…"
                     : pr >= 0 ? "Загрузка " + Updater.newVersion + " · " + pr + "%"
                     : !Updater.error.isEmpty() ? Updater.error : "Доступна версия " + Updater.newVersion);
-            updBtn.setVisibility(pr >= 0 ? View.GONE : View.VISIBLE);
-            updBtn.setText(Updater.error.isEmpty() ? "Обновить" : "Ещё раз");
+            if (pr == 101) Updater.showConfirm(this);
+            boolean stuck = Updater.stuck();
+            updBtn.setVisibility(pr >= 0 && !stuck ? View.GONE : View.VISIBLE);
+            updBtn.setText(stuck ? "Установить" : Updater.error.isEmpty() ? "Обновить" : "Ещё раз");
         }
 
         boolean on = s == AppState.ON;

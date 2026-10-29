@@ -33,6 +33,8 @@ public final class Updater {
     static volatile String error = "";
     static volatile String checkError = ""; // last check failed, shown on the update page
     static volatile boolean checking;
+    static volatile long installAt; // when the APK went to the installer
+    static volatile Intent confirm; // system "install?" screen waiting for the main screen to open it
 
     private Updater() {}
 
@@ -117,6 +119,7 @@ public final class Updater {
 
     /** Called from the "Обновить" button. */
     static void start(final Activity act) {
+        if (progress == 101) { retryInstall(act); return; }
         if (progress >= 0 || apkUrl.isEmpty()) return;
         if (!act.getPackageManager().canRequestPackageInstalls()) {
             Toast.makeText(act, "Разрешите Dash устанавливать обновления и нажмите «Обновить» ещё раз", Toast.LENGTH_LONG).show();
@@ -153,7 +156,7 @@ public final class Updater {
                     progress = 101;
                     install(c, f);
                 } catch (Exception e) {
-                    error = "Не удалось загрузить обновление";
+                    error = progress == 101 ? "Установка не удалась" : "Не удалось загрузить обновление";
                     AppState.log("Обновление: " + e);
                     progress = -1;
                 }
@@ -191,8 +194,52 @@ public final class Updater {
         return b.toString();
     }
 
+    /** The installer has not answered for a while: the button shows again. */
+    static boolean stuck() {
+        return progress == 101 && System.currentTimeMillis() - installAt > 15_000;
+    }
+
+    /** Tap while "Установка…": reopen the system prompt, or hand the downloaded file over again. */
+    private static void retryInstall(Activity act) {
+        Intent i = confirm;
+        if (i != null) {
+            showConfirm(act);
+            return;
+        }
+        final Context c = act.getApplicationContext();
+        installAt = System.currentTimeMillis();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    install(c, new File(c.getCacheDir(), "update.apk"));
+                } catch (Exception e) {
+                    error = "Установка не удалась";
+                    AppState.log("Обновление: " + e);
+                    progress = -1;
+                }
+            }
+        }, "update-install").start();
+    }
+
+    /** Called by the visible main screen: opens the installer's confirm screen if one is waiting. */
+    static void showConfirm(Activity act) {
+        Intent i = confirm;
+        if (i == null) return;
+        confirm = null;
+        try {
+            act.startActivity(i);
+        } catch (Exception e) {
+            AppState.log("Обновление: " + e);
+        }
+    }
+
     private static void install(Context c, File apk) throws Exception {
+        installAt = System.currentTimeMillis();
+        confirm = null;
         PackageInstaller pi = c.getPackageManager().getPackageInstaller();
+        for (PackageInstaller.SessionInfo old : pi.getMySessions()) { // earlier attempts that never finished
+            try { pi.abandonSession(old.getSessionId()); } catch (Exception ignored) {}
+        }
         PackageInstaller.SessionParams sp = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
         sp.setAppPackageName(c.getPackageName());
         int id = pi.createSession(sp);
@@ -203,26 +250,29 @@ public final class Updater {
                 while ((n = in.read(buf)) > 0) o.write(buf, 0, n);
                 s.fsync(o);
             }
-            Intent i = new Intent(c, InstallStatusActivity.class).setAction(ACTION_STATUS); // explicit, non-exported target
-            PendingIntent p = PendingIntent.getActivity(c, 7, i,
+            // a broadcast, not an activity: newer Android blocks activity starts from the installer in the background
+            Intent i = new Intent(c, InstallStatusReceiver.class).setAction(ACTION_STATUS); // explicit, non-exported target
+            PendingIntent p = PendingIntent.getBroadcast(c, 7, i,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
             s.commit(p.getIntentSender());
         }
     }
 
-    /** MainActivity got the installer's answer. */
-    static void onStatus(Activity act, Intent i) {
+    /** The installer's answer (InstallStatusReceiver). */
+    static void onStatus(Context c, Intent i) {
         int st = i.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
         if (st == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-            Intent confirm = i.getParcelableExtra(Intent.EXTRA_INTENT);
-            if (confirm != null) {
-                confirm.setFlags(confirm.getFlags() & ~(Intent.FLAG_GRANT_READ_URI_PERMISSION
+            Intent ask = i.getParcelableExtra(Intent.EXTRA_INTENT);
+            if (ask != null) {
+                ask.setFlags((ask.getFlags() & ~(Intent.FLAG_GRANT_READ_URI_PERMISSION
                         | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-                        | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION));
-                act.startActivity(confirm);
+                        | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)) | Intent.FLAG_ACTIVITY_NEW_TASK);
+                confirm = ask; // the main screen opens it on its next tick (or on return to Dash)
+                installAt = System.currentTimeMillis();
             }
             return;
         }
+        confirm = null;
         progress = -1;
         if (st != PackageInstaller.STATUS_SUCCESS) {
             String m = i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
