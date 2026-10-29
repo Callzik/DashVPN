@@ -97,6 +97,9 @@ public final class Changelog {
         ENTRIES.put(52, new String[]{
                 "Редактор без рамки: выбранная плитка остаётся яркой, остальные приглушаются",
         });
+        ENTRIES.put(53, new String[]{
+                "Перетаскивание плиток: плитка больше не вылезает за края экрана",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
