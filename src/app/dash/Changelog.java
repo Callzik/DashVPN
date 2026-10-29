@@ -100,6 +100,9 @@ public final class Changelog {
         ENTRIES.put(53, new String[]{
                 "Перетаскивание плиток: плитка больше не вылезает за края экрана",
         });
+        ENTRIES.put(54, new String[]{
+                "Остаток подписки: кольцо у заголовка «Серверы» показывает потраченный трафик и сколько дней осталось, нажатие — подробности",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

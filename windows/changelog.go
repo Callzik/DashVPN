@@ -60,6 +60,9 @@ var changelog = map[string][]string{
 	"1.9.3": {
 		"Чище главный экран: номер версии теперь только в настройках",
 	},
+	"1.10.0": {
+		"Остаток подписки: кольцо у заголовка «Серверы» показывает потраченный трафик и сколько дней осталось, клик — подробности",
+	},
 }
 
 // whatsNew lists the entries newer than seen up to the running version, oldest first.
