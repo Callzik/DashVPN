@@ -36,8 +36,15 @@ h1{font-size:21px;font-weight:700;flex:1}
 .power svg.icon{width:50px;height:50px;stroke:var(--muted);transition:stroke .3s}
 .st-connecting .btn{border-color:rgba(139,124,255,.6)}
 .st-connecting svg.icon{stroke:var(--accent)}
-.st-on .btn{background:var(--accent);border-color:var(--accent);box-shadow:0 0 60px rgba(139,124,255,.45)}
+.st-on .btn{background:radial-gradient(circle at 34% 30%,#fff 0,#C9C0FF 12%,#8B7CFF 40%,#4B3BC9 78%,#2A1F7A 100%);border-color:transparent;box-shadow:0 0 70px rgba(139,124,255,.55),inset -18px -22px 40px rgba(20,10,60,.55)}
 .st-on svg.icon{stroke:var(--bg)}
+/* nebula behind the button while connected */
+#nebula{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity 1.2s;
+  background:radial-gradient(260px 260px at var(--nx,50%) var(--ny,40%),rgba(139,124,255,.28),transparent),
+  radial-gradient(180px 180px at calc(var(--nx,50%) - 90px) calc(var(--ny,40%) + 80px),rgba(90,60,200,.22),transparent),
+  radial-gradient(150px 150px at calc(var(--nx,50%) + 110px) calc(var(--ny,40%) - 60px),rgba(200,120,255,.14),transparent),
+  radial-gradient(170px 170px at calc(var(--nx,50%) + 40px) calc(var(--ny,40%) + 170px),rgba(70,90,220,.15),transparent)}
+#nebula.on{opacity:1}
 .st-waiting .btn{background:var(--warn-tint);border-color:rgba(242,181,68,.6)}
 .st-waiting svg.icon{stroke:var(--warn)}
 .power:hover .btn{filter:brightness(1.08)}
@@ -52,7 +59,11 @@ h1{font-size:21px;font-weight:700;flex:1}
 .tile.clickable:hover{border-color:var(--line2)}
 .title{font-size:32px;font-weight:700;letter-spacing:-1px;margin-top:10px}
 .subtitle{color:var(--muted);margin-top:4px;text-align:center;min-height:21px;max-width:360px}
-.subtitle.mono{font-family:"Dash Flags",Consolas,"Cascadia Mono",monospace;font-size:15px}
+.title.timer{font-size:36px;font-variant-numeric:tabular-nums}
+.speed{display:flex;gap:22px;justify-content:center;font-family:Consolas,"Cascadia Mono",monospace;font-size:14px}.speed b{color:var(--fg);font-weight:600}
+.scard{background:rgba(19,18,26,.82);padding:13px 16px 13px 13px;gap:12px}
+.scard .flag{width:40px;height:40px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;flex:none;font-size:23px;line-height:1}
+.scard .flag.txt{font-size:16px;font-weight:700;color:var(--muted)}.scard .flag svg{width:22px;height:22px}
 .err{color:var(--bad);font-size:14px;margin-top:8px;text-align:center;max-width:360px}
 .banner{border-radius:14px;padding:10px 14px;font-size:13px;margin-bottom:10px;background:var(--warn-tint);color:var(--warn-fg)}
 .banner.ok{background:var(--accent-tint);color:#D9D3FF}
@@ -149,7 +160,7 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
 <body>
 
 <!-- main -->
-<canvas id="stars"></canvas>
+<canvas id="stars"></canvas><div id="nebula"></div>
 <section class="view" id="v-main">
   <div class="top">
     <div class="brand"><svg width="28" height="28" viewBox="0 0 180 180"><defs><linearGradient id="lt" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#8B7CFF" stop-opacity="0"/><stop offset="1" stop-color="#8B7CFF" stop-opacity=".9"/></linearGradient><radialGradient id="lg" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#8B7CFF" stop-opacity=".55"/><stop offset="1" stop-color="#8B7CFF" stop-opacity="0"/></radialGradient><radialGradient id="lb" cx=".38" cy=".36" r=".7"><stop offset="0" stop-color="#fff"/><stop offset=".35" stop-color="#8B7CFF"/><stop offset="1" stop-color="#4B3BC9"/></radialGradient></defs><rect width="180" height="180" rx="42" fill="#17151F"/><path d="M26 150 L106 70 L120 84 Z" fill="url(#lt)"/><path d="M44 154 L110 88 L116 94 Z" fill="url(#lt)" opacity=".6"/><circle cx="120" cy="62" r="44" fill="url(#lg)"/><circle cx="120" cy="62" r="24" fill="url(#lb)"/></svg><span class="word">dash</span><span class="m" id="ver" style="font-size:12px"></span></div>
@@ -161,18 +172,15 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
       <div class="btn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v8"/><path d="M17.7 6.6a8 8 0 1 1-11.4 0"/></svg></div>
     </div>
     <div class="title" id="title">Отключено</div>
-    <div class="subtitle" id="subtitle">Нажмите, чтобы включить</div>
+    <div class="subtitle" id="subtitle"></div>
     <div class="err" id="err"></div>
   </div>
   <div id="bannerbox"></div>
   <div class="upd" id="upd" style="display:none"><span class="grow" id="updtext"></span><button class="ubtn" id="updbtn" onclick="api('/api/update/install').then(poll)">Обновить</button></div>
-  <div class="tiles">
-    <div class="tile clickable" title="Проверить пинг текущего сервера" onclick="if(S.state==='on')api('/api/ping-current').then(poll)"><div class="m">Пинг</div><div class="v" id="t-ping">—</div></div>
-    <div class="tile"><div class="m">Режим</div><div class="v t" id="t-mode">Авто</div></div>
-  </div>
-  <div class="card clickable row" onclick="show('servers')" style="padding:15px 14px 15px 16px">
-    <div class="grow"><div class="b ell" id="srvname" style="font-size:16px">Автовыбор сервера</div><div class="m ell" id="srvsub" style="min-height:18px">Самый быстрый из доступных</div></div>
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9C98B0" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+  <div class="card scard clickable row" onclick="show('servers')">
+    <div class="flag" id="srvflag"></div>
+    <div class="grow"><div class="b ell" id="srvname" style="font-size:16px">Авто</div><div class="m ell" id="srvsub"></div></div>
+    <span id="srvping" title="Проверить пинг" onclick="event.stopPropagation();if(S.state==='on')api('/api/ping-current').then(poll)"></span>
   </div>
 </section>
 
@@ -297,8 +305,10 @@ function show(v){
   if(v==='servers'){offChanged=false;loadServers();if(S.state==='on')api('/api/ping-all')}
   if(v==='settings'||v==='spage')loadSettings();
   if(v==='apps')loadApps();
+  if(v==='main')requestAnimationFrame(starsCenter);
 }
 function dur(sec){sec=Math.max(0,sec);const p=n=>String(n).padStart(2,'0');return p(Math.floor(sec/3600))+':'+p(Math.floor(sec/60)%60)+':'+p(sec%60)}
+function rate(b){b=b||0;return b<1024?b+' Б/с':b<1048576?Math.round(b/1024)+' КБ/с':(b/1048576).toFixed(b<10485760?1:0)+' МБ/с'}
 function pc(p){return p<300?'good':p<400?'mid':'bad'}
 
 async function poll(){
@@ -316,21 +326,24 @@ async function poll(){
   const st=S.state;
   $('power').className='power st-'+st;
   const titles={off:'Отключено',connecting:'Подключение…',on:'Подключено',waiting:'Нет ответа'};
-  $('title').textContent=titles[st];$('title').style.color=st==='waiting'?'var(--warn)':'';
-  const sub=$('subtitle');sub.classList.toggle('mono',st==='on');
-  sub.textContent=st==='on'?dur(Math.floor(Date.now()/1000)-S.since):st==='off'?'Нажмите, чтобы включить':S.phase;
+  const tl=$('title');tl.classList.toggle('timer',st==='on');
+  tl.textContent=st==='on'?dur(Math.floor(Date.now()/1000)-S.since):titles[st];tl.style.color=st==='waiting'?'var(--warn)':'';
+  const sub=$('subtitle');
+  if(st==='on')sub.innerHTML=`<span class="speed"><span>↓ <b>${rate(S.down)}</b></span><span>↑ <b>${rate(S.up)}</b></span></span>`;
+  else sub.textContent=st==='off'?'':S.phase;
+  $('nebula').classList.toggle('on',st==='on');starsMode(st);
   $('err').textContent=st==='off'?S.error:'';
   $('bannerbox').innerHTML=S.banner?`<div class="banner ${S.bannerTone===1?'ok':''}">${esc(S.banner)}</div>`:'';
   const manual=!!S.pinned;
-  if(st==='on'&&S.server){
-    $('srvname').textContent=S.server;
-    $('srvsub').textContent=S.switching?'Проверка серверов…':manual?'Выбран вручную':'Лучший из '+S.alive+' · '+(S.group==='auto-lte'?'резервные':'основные');
-  }else if(st==='connecting'){$('srvname').textContent='Выбор сервера…';$('srvsub').textContent=S.summary||''}
-  else if(st==='waiting'){$('srvname').textContent='Сервер не выбран';$('srvsub').textContent='Выбор после появления связи'}
-  else{$('srvname').textContent=manual?S.pinned:'Автовыбор сервера';$('srvsub').textContent=manual?'Выбран вручную':'Самый быстрый из доступных'}
-  const tp=$('t-ping');tp.textContent=st!=='on'?'—':S.pingingCurrent?'…':S.ping>0?S.ping:'—';
-  tp.className='v '+(st==='on'&&!S.pingingCurrent&&S.ping>0?pc(S.ping):'');
-  $('t-mode').textContent=manual?'Вручную':'Авто';
+  // the card shows the server in use (or the pinned one), else "Авто"
+  const name=st==='on'&&S.server?S.server:manual?S.pinned:'';
+  const [flag,title]=name?splitFlag(name):['',''];
+  const fb=$('srvflag');fb.className='flag'+(name&&!flag?' txt':'');
+  fb.innerHTML=!name?AUTO_IC:flag||esc((title.trim()[0]||'?').toUpperCase());
+  $('srvname').textContent=name?title:'Авто';
+  $('srvsub').textContent=st==='on'&&S.switching?'Проверка серверов…':name?(manual?'Вручную':'Авто'):'';
+  $('srvsub').style.display=$('srvsub').textContent?'':'none';
+  $('srvping').innerHTML=st!=='on'?'':S.pingingCurrent?'<span class="ping">…</span>':S.ping>0?pingPill(S.ping):'';
   orbitState(st);
   if(view==='servers')loadServers();
   if(view==='settings'&&menuKey()!==lastMenu)renderMenu();
@@ -490,19 +503,41 @@ async function addSub(id,onb){
 async function pasteInto(id){try{$(id).value=(await navigator.clipboard.readText()).trim()}catch(e){toast('Нажмите Ctrl+V в поле');$(id).focus()}}
 async function copyLog(){try{await navigator.clipboard.writeText($('log').textContent);toast('Журнал скопирован')}catch(e){toast('Не удалось скопировать')}}
 
-/* star background */
-const SF={st:[],w:0,h:0};
+/* star background: still when off, a warp jump while connecting, a slow drift while connected */
+const SF={st:[],w:0,h:0,mode:'off',warp:0,drift:0,last:0,cx:0,cy:0};
 function starsBuild(){const cv=$('stars'),d=devicePixelRatio||1;SF.w=innerWidth;SF.h=innerHeight;cv.width=SF.w*d;cv.height=SF.h*d;
   let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
   const n=Math.max(40,Math.round(SF.w*SF.h/1800));SF.st=[];
-  for(let i=0;i<n;i++){const s=rnd();SF.st.push({x:rnd()*SF.w,y:rnd()*SF.h,r:.5+s*s*1.1,a:.12+rnd()*.45,ph:rnd()*6.283,tw:rnd()<.25,tint:rnd()<.2})}}
-function starsFrame(){const cv=$('stars'),c=cv.getContext('2d'),d=devicePixelRatio||1,t=performance.now()/1000;
+  for(let i=0;i<n;i++){const s=rnd();SF.st.push({x:rnd()*SF.w,y:rnd()*SF.h,r:.5+s*s*1.1,a:.12+rnd()*.45,ph:rnd()*6.283,tw:rnd()<.25,tint:rnd()<.2,z:.4+rnd()*.6})}}
+function starsMode(st){if(SF.mode!==st){SF.mode=st;starsCenter()}}
+function starsCenter(){const r=$('power').getBoundingClientRect();if(r.width){SF.cx=r.left+r.width/2;SF.cy=r.top+r.height/2;
+  const n=$('nebula').style;n.setProperty('--nx',SF.cx+'px');n.setProperty('--ny',SF.cy+'px')}}
+addEventListener('resize',starsCenter);
+function starsFrame(){const cv=$('stars'),c=cv.getContext('2d'),d=devicePixelRatio||1,now=performance.now(),t=now/1000;
   if(SF.w!==innerWidth||SF.h!==innerHeight)starsBuild();
-  c.setTransform(d,0,0,d,0,0);c.clearRect(0,0,SF.w,SF.h);
-  for(const s of SF.st){const a=s.tw?s.a*(.45+.55*(.5+.5*Math.sin(t*.9+s.ph))):s.a;
-    c.fillStyle=s.tint?`rgba(196,188,255,${a})`:`rgba(255,255,255,${a})`;c.beginPath();c.arc(s.x,s.y,s.r,0,7);c.fill()}
-  const fly=starsComet(c,performance.now());
-  setTimeout(()=>requestAnimationFrame(starsFrame),fly?0:66)}
+  const dt=SF.last?Math.min(100,now-SF.last)/1000:0;SF.last=now;
+  // ease between modes so the jump speeds up and slows down
+  const tw=SF.mode==='connecting'?1:0,td=SF.mode==='on'?1:0;
+  SF.warp+=(tw-SF.warp)*Math.min(1,dt*(tw?1.5:3));SF.drift+=(td-SF.drift)*Math.min(1,dt*1.2);
+  if(SF.warp<.002)SF.warp=tw;if(Math.abs(SF.drift-td)<.002)SF.drift=td;
+  const dim=SF.mode==='off'||SF.mode==='waiting'?.6:1;
+  c.setTransform(d,0,0,d,0,0);c.clearRect(0,0,SF.w,SF.h);c.lineCap='round';
+  for(const s of SF.st){
+    let vx=-14*SF.drift*s.z,vy=7*SF.drift*s.z;
+    if(SF.warp>0){const dx=s.x-SF.cx,dy=s.y-SF.cy,L=Math.hypot(dx,dy)||1,v=SF.warp*(40+L*2.2)*s.z;vx+=dx/L*v;vy+=dy/L*v}
+    s.x+=vx*dt;s.y+=vy*dt;
+    if(s.x<-60||s.x>SF.w+60||s.y<-60||s.y>SF.h+60){
+      if(SF.warp>.3){const a=Math.random()*6.283,r=20+Math.random()*90;s.x=SF.cx+Math.cos(a)*r;s.y=SF.cy+Math.sin(a)*r}
+      else{s.x=(s.x+SF.w+120)%(SF.w+120)-60;s.y=(s.y+SF.h+120)%(SF.h+120)-60}}
+    const a=(s.tw?s.a*(.45+.55*(.5+.5*Math.sin(t*.9+s.ph))):s.a)*dim;
+    const col=s.tint?`rgba(196,188,255,${a})`:`rgba(255,255,255,${a})`;
+    const sp=Math.hypot(vx,vy),len=Math.min(70,sp*.12);
+    if(len>1.2){c.strokeStyle=col;c.lineWidth=s.r*1.4;c.beginPath();c.moveTo(s.x,s.y);c.lineTo(s.x-vx/sp*len,s.y-vy/sp*len);c.stroke()}
+    else{c.fillStyle=col;c.beginPath();c.arc(s.x,s.y,s.r,0,7);c.fill()}}
+  const fly=SF.warp>.3?false:starsComet(c,now);
+  if(document.hidden||(!fly&&!SF.warp&&!SF.drift))setTimeout(()=>requestAnimationFrame(starsFrame),66);
+  else if(!fly&&!SF.warp)setTimeout(()=>requestAnimationFrame(starsFrame),33);
+  else requestAnimationFrame(starsFrame)}
 const CM={start:-1,next:performance.now()+1200};
 function starsComet(c,now){
   if(CM.start<0){if(now<CM.next)return false;
