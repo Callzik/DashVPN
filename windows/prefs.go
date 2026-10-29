@@ -22,7 +22,8 @@ type Prefs struct {
 type PrefsData struct {
 	Subs       []string          `json:"subs"`
 	Names      map[string]string `json:"names"`
-	Infos      map[string]string `json:"sub_info"` // subscription-userinfo header per subscription
+	Infos      map[string]string `json:"sub_info"`     // subscription-userinfo header per subscription
+	Reminded   map[string]string `json:"sub_reminded"` // "expire:days" of the last end-of-subscription reminder
 	Pinned     string            `json:"pinned"`
 	Off        []string          `json:"off"`
 	Roles      map[string]string `json:"roles"` // server name -> regular | lte | both, set by the user
@@ -80,6 +81,11 @@ func (p *Prefs) Get() PrefsData {
 		infos[k] = v
 	}
 	d.Infos = infos
+	reminded := map[string]string{}
+	for k, v := range p.D.Reminded {
+		reminded[k] = v
+	}
+	d.Reminded = reminded
 	roles := map[string]string{}
 	for k, v := range p.D.Roles {
 		roles[k] = v
@@ -128,6 +134,7 @@ func (p *Prefs) RemoveSub(u string) {
 		d.Subs = out
 		delete(d.Names, u)
 		delete(d.Infos, u)
+		delete(d.Reminded, u)
 		d.SubUpdated = 0
 	})
 	_ = os.Remove(p.cachePath(u))

@@ -87,7 +87,7 @@ func (a *API) handler() http.Handler {
 	})
 	api("/api/toggle", func(w http.ResponseWriter, r *http.Request) { a.core.Toggle(); writeJSON(w, true) })
 	api("/api/servers", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"servers": a.core.Servers(), "pinned": a.prefs.Get().Pinned, "ring": a.core.SubRing(time.Now())})
+		writeJSON(w, map[string]any{"servers": a.core.Servers(), "pinned": a.prefs.Get().Pinned})
 	})
 	api("/api/pin", func(w http.ResponseWriter, r *http.Request) {
 		a.core.Pin(str(body(r)["name"]))
@@ -109,9 +109,9 @@ func (a *API) handler() http.Handler {
 	api("/api/ping-current", func(w http.ResponseWriter, r *http.Request) { a.core.PingCurrent(); writeJSON(w, true) })
 	api("/api/subs", func(w http.ResponseWriter, r *http.Request) {
 		d := a.prefs.Get()
-		var list []map[string]string
+		var list []map[string]any
 		for _, u := range d.Subs {
-			list = append(list, map[string]string{"url": u, "name": a.prefs.SubLabel(u)})
+			list = append(list, map[string]any{"url": u, "name": a.prefs.SubLabel(u), "ring": Ring(d.Infos[u], time.Now())})
 		}
 		writeJSON(w, map[string]any{"subs": list, "updated": d.SubUpdated, "ruDirect": d.RuDirect, "blockedVpn": d.BlockedVPN, "autoStart": d.AutoStart,
 			"autorun": AutostartEnabled(), "summary": a.core.View().Summary})

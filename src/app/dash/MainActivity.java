@@ -134,6 +134,7 @@ public class MainActivity extends Activity {
         if (grid != null) rebuildTiles();
         showScreen();
         Updater.check(this, false);
+        SubReminder.check(this, prefs);
     }
 
     @Override protected void onPause() {

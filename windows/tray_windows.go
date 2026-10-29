@@ -205,6 +205,17 @@ func (t *Tray) hintOnce() {
 	procShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&t.nid)))
 }
 
+// Notify shows a balloon from the tray icon.
+func (t *Tray) Notify(title, text string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.nid.UFlags = nifInfo
+	t.nid.DwInfoFlags = niifInfo
+	copyUTF16(t.nid.SzInfoTitle[:], title)
+	copyUTF16(t.nid.SzInfo[:], text)
+	procShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&t.nid)))
+}
+
 func (t *Tray) Show() {
 	procShowWindow.Call(t.hwnd, swShow)
 	if r, _, _ := procIsIconic.Call(t.hwnd); r != 0 {

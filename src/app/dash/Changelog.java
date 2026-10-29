@@ -106,6 +106,10 @@ public final class Changelog {
         ENTRIES.put(55, new String[]{
                 "Только через VPN: выбранные приложения не выходят в интернет, пока VPN выключен (Настройки → Только через VPN)",
         });
+        ENTRIES.put(56, new String[]{
+                "Остаток подписки переехал в Настройки → Подписки: кольцо у каждой подписки, рядом трафик и сколько дней осталось",
+                "Напоминание о подписке: уведомление за 3, 2 и 1 день до окончания",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

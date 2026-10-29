@@ -46,10 +46,6 @@ func TestSubInfo(t *testing.T) {
 	if got := ParseSubInfo(fmt.Sprintf("download=%d; total=%d", 3*gib/2, 2*gib)).Text(now); got != "1.5 / 2 ГБ" {
 		t.Fatalf("fraction: %q", got)
 	}
-	if MostUrgent([]*SubInfo{a, nil, low, unl}, now) != low || MostUrgent([]*SubInfo{a, old, low}, now) != old ||
-		MostUrgent([]*SubInfo{unl, a}, now) != a || MostUrgent([]*SubInfo{nil}, now) != nil {
-		t.Fatal("most urgent")
-	}
 }
 
 func TestLoadSubsKeepsInfo(t *testing.T) {
@@ -65,11 +61,54 @@ func TestLoadSubsKeepsInfo(t *testing.T) {
 	if got := c.loadSubs([]string{srv.URL}); len(got) != 1 {
 		t.Fatalf("subs: %v", got)
 	}
-	if ring := c.SubRing(time.Now()); ring == nil || ring["label"] != "∞" {
+	if ring := Ring(p.Get().Infos[srv.URL], time.Now()); ring == nil || ring["label"] != "∞" || ring["text"] != "0 / 1 ГБ" {
 		t.Fatalf("ring: %v", ring)
 	}
+	p.MarkUpdated()
+	if c.savedSubs([]string{srv.URL}) == nil {
+		t.Fatal("saved copy with info should be used")
+	}
+	p.Update(func(d *PrefsData) { delete(d.Infos, srv.URL) })
+	if c.savedSubs([]string{srv.URL}) != nil {
+		t.Fatal("a copy saved before 2.8.0 should be downloaded again")
+	}
 	p.RemoveSub(srv.URL)
-	if c.SubRing(time.Now()) != nil {
-		t.Fatal("ring after remove")
+	if _, ok := p.Get().Infos[srv.URL]; ok {
+		t.Fatal("info after remove")
+	}
+}
+
+func TestRemind(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	dir := t.TempDir()
+	p := LoadPrefs(dir)
+	u := "https://a.example/sub"
+	p.AddSub(u)
+	c := NewCore(p, dir, dir, dir, &Log{})
+	var got []string
+	c.Notify = func(title, text string) { got = append(got, title) }
+	set := func(exp int64) {
+		p.Update(func(d *PrefsData) { d.Infos = map[string]string{u: fmt.Sprintf("total=0; expire=%d", exp)} })
+	}
+	set(now.Unix() + 3*86400 - 60)
+	c.remind(now)
+	c.remind(now)
+	c.remind(now.Add(time.Hour))
+	if len(got) != 1 || got[0] != "a.example — осталось 3 дня" {
+		t.Fatalf("3 days: %v", got)
+	}
+	c.remind(now.Add(25 * time.Hour))
+	c.remind(now.Add(49 * time.Hour))
+	c.remind(now.Add(73 * time.Hour)) // over: nothing
+	if len(got) != 3 || got[1] != "a.example — осталось 2 дня" || got[2] != "a.example — осталось 1 день" {
+		t.Fatalf("2 and 1: %v", got)
+	}
+	set(now.Unix() + 33*86400) // renewed
+	c.remind(now.Add(30 * 86400 * time.Second))
+	if len(got) != 4 {
+		t.Fatalf("after renewal: %v", got)
+	}
+	if days(5) != "5 дней" || days(11) != "11 дней" || days(21) != "21 день" {
+		t.Fatal("plural")
 	}
 }
