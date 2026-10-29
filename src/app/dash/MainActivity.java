@@ -158,6 +158,8 @@ public class MainActivity extends Activity {
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(Ui.dp(c, 22), Ui.dp(c, 22), Ui.dp(c, 22), Ui.dp(c, 22));
+        col.setClipToPadding(false); // the tile grid reaches into the padding to draw its edit frame
+        col.setClipChildren(false);
         sv.addView(col, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // header: comet logo + wordmark + settings
