@@ -32,6 +32,7 @@ public final class Server {
     public java.util.List<Map<String, Object>> xrayDeps;
 
     public String groupLabel() {
+        if (both && group != EXCLUDED) return "оба";
         return group == LTE ? "LTE" : group == REGULAR ? "обычный" : "не участвует";
     }
 }

@@ -113,6 +113,9 @@ public final class Changelog {
         ENTRIES.put(57, new String[]{
                 "Обновление больше не зависает на «Установка…»: окно установки открывается само, а если нет — появляется кнопка «Установить»",
         });
+        ENTRIES.put(58, new String[]{
+                "Журнал чище: без строк о каждом соединении и DNS-запросе, видны пинг и ошибки серверов",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

@@ -285,7 +285,7 @@ final class XrayJson {
             rules.add(Json.obj("type", "field", "inboundTag", Json.arr(in), "outboundTag", out));
         }
         return Json.write(Json.obj(
-                "log", Json.obj("loglevel", "warning"),
+                "log", Json.obj("loglevel", "warning", "access", "none"),
                 "inbounds", inbounds,
                 "outbounds", outbounds,
                 "routing", Json.obj("domainStrategy", "AsIs", "rules", rules)));

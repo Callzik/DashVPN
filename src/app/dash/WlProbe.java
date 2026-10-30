@@ -16,6 +16,7 @@ public final class WlProbe {
 
     public static final class Result {
         public int state;          // AppState.WL_*
+        boolean early;             // answer was clear before every site replied
         public boolean[] ru = new boolean[RU.length];
         public boolean[] foreign = new boolean[FOREIGN.length];
         boolean[] ruDone = new boolean[RU.length];
@@ -38,7 +39,7 @@ public final class WlProbe {
                     + (state == AppState.WL_ON ? "включены" : state == AppState.WL_OFF ? "выключены" : "нет интернета");
         }
 
-        private static String ok(boolean b, boolean done) { return b ? "ok" : done ? "нет" : "не дождались"; }
+        private String ok(boolean b, boolean done) { return b ? "ok" : done ? "нет" : early ? "не нужно" : "не дождались"; }
     }
 
     private WlProbe() {}
@@ -63,6 +64,7 @@ public final class WlProbe {
                     break;
                 }
             }
+            boolean early = decided(r);
             boolean ruOk = r.ru[0] || r.ru[1];
             int fr = r.foreignOk();
             if (fr >= 2) r.state = AppState.WL_OFF;
@@ -72,6 +74,7 @@ public final class WlProbe {
             // a snapshot: late answers must not change what was logged
             Result out = new Result();
             out.state = r.state;
+            out.early = early;
             System.arraycopy(r.ru, 0, out.ru, 0, RU.length);
             System.arraycopy(r.ruDone, 0, out.ruDone, 0, RU.length);
             System.arraycopy(r.foreign, 0, out.foreign, 0, FOREIGN.length);
