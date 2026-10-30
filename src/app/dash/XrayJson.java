@@ -33,10 +33,17 @@ final class XrayJson {
             if (obs == null && cfg.containsKey("type")) { obs = new ArrayList<>(); obs.add(cfg); }
             if (obs == null) continue;
 
+            // outbounds other outbounds dial through are hops of a chain, not servers of their own
+            List<String> hops = new ArrayList<>();
+            for (Object ob : obs) {
+                Map<String, Object> o = map(ob);
+                if (o != null) collectDialer(map(o.get("streamSettings")), hops);
+            }
             List<Server> fromCfg = new ArrayList<>();
             for (Object ob : obs) {
                 Map<String, Object> o = map(ob);
                 if (o == null) continue;
+                if (o.containsKey("protocol") && hops.contains(str(o.get("tag")))) continue;
                 Server s;
                 try {
                     s = o.containsKey("protocol") ? fromXray(o, obs, remarks, warnings) : fromSingBox(o, remarks);
@@ -86,14 +93,20 @@ final class XrayJson {
 
         Map<String, Object> sb;
         String host;
+        boolean xrayOnly = false;
         switch (proto) {
             case "vless":
             case "vmess": {
+                // newer Xray also takes the server right in settings: {address, port, id, …}
                 Map<String, Object> vn = first(settings.get("vnext"));
+                if (vn == null && settings.containsKey("address")) vn = settings;
                 if (vn == null) return null;
                 host = str(vn.get("address"));
                 Map<String, Object> user = first(vn.get("users"));
+                if (user == null && vn.containsKey("id")) user = vn;
                 if (user == null) return null;
+                String enc = str(user.get("encryption"));
+                if (!enc.isEmpty() && !enc.equals("none")) xrayOnly = true; // VLESS Encryption: sing-box can't
                 sb = Json.obj("type", proto, "tag", "", "server", host, "server_port", num(vn.get("port")),
                         "uuid", str(user.get("id")));
                 if (proto.equals("vless")) {
@@ -110,6 +123,7 @@ final class XrayJson {
             case "trojan":
             case "shadowsocks": {
                 Map<String, Object> sv = first(settings.get("servers"));
+                if (sv == null && settings.containsKey("address")) sv = settings;
                 if (sv == null) return null;
                 host = str(sv.get("address"));
                 sb = Json.obj("type", proto, "tag", "", "server", host, "server_port", num(sv.get("port")),
@@ -126,8 +140,11 @@ final class XrayJson {
         if (st == null) st = new HashMap<>();
         Map<String, String> q = new HashMap<>();
         String net = str(st.get("network"));
-        if (SubParser.isXhttp(net)) {
-            // sing-box has no xhttp: hand this outbound to the bundled Xray as it is
+        List<String> dialers = new ArrayList<>();
+        collectDialer(st, dialers);
+        if (SubParser.isXhttp(net) || xrayOnly || !dialers.isEmpty() || st.containsKey("finalmask")) {
+            // sing-box has no xhttp, VLESS Encryption, dialer chains or finalmask:
+            // hand this outbound to the bundled Xray as it is
             s.xray = copy(o);
             s.xray.remove("tag");
             s.xrayDeps = deps(st, all);

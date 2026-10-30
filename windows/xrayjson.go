@@ -103,10 +103,22 @@ func parseJSONSub(root any, warnings *[]string) []*Server {
 		if obs == nil && cfg["type"] != nil {
 			obs = []any{cfg}
 		}
+		// outbounds other outbounds dial through are hops of a chain, not servers of their own
+		hops := map[string]bool{}
+		for _, ob := range obs {
+			var want []string
+			collectDialer(m(m(ob)["streamSettings"]), &want)
+			for _, t := range want {
+				hops[t] = true
+			}
+		}
 		var fromCfg []*Server
 		for _, ob := range obs {
 			o := m(ob)
 			if o == nil {
+				continue
+			}
+			if _, ok := o["protocol"]; ok && hops[str(o["tag"])] {
 				continue
 			}
 			var s *Server
@@ -176,16 +188,27 @@ func fromXray(o map[string]any, all []any, remarks string, warnings *[]string) (
 	}
 	var sb obj
 	var host string
+	xrayOnly := false
 	switch proto {
 	case "vless", "vmess":
+		// newer Xray also takes the server right in settings: {address, port, id, …}
 		vn := first(settings["vnext"])
+		if vn == nil && settings["address"] != nil {
+			vn = settings
+		}
 		if vn == nil {
 			return nil, nil
 		}
 		host = str(vn["address"])
 		user := first(vn["users"])
+		if user == nil && vn["id"] != nil {
+			user = vn
+		}
 		if user == nil {
 			return nil, nil
+		}
+		if enc := str(user["encryption"]); enc != "" && enc != "none" {
+			xrayOnly = true // VLESS Encryption: sing-box can't
 		}
 		sb = obj{"type": proto, "tag": "", "server": host, "server_port": numOf(vn["port"]), "uuid": str(user["id"])}
 		if proto == "vless" {
@@ -203,6 +226,9 @@ func fromXray(o map[string]any, all []any, remarks string, warnings *[]string) (
 		sb["packet_encoding"] = "xudp"
 	case "trojan", "shadowsocks":
 		sv := first(settings["servers"])
+		if sv == nil && settings["address"] != nil {
+			sv = settings
+		}
 		if sv == nil {
 			return nil, nil
 		}
@@ -220,7 +246,11 @@ func fromXray(o map[string]any, all []any, remarks string, warnings *[]string) (
 		st = obj{}
 	}
 	netw := str(st["network"])
-	if isXhttp(netw) {
+	var dialers []string
+	collectDialer(st, &dialers)
+	if _, fm := st["finalmask"]; isXhttp(netw) || xrayOnly || len(dialers) > 0 || fm {
+		// sing-box has no xhttp, VLESS Encryption, dialer chains or finalmask:
+		// hand this outbound to the bundled Xray as it is
 		s.Xray = deepCopy(o)
 		delete(s.Xray, "tag")
 		s.XrayDeps = xrayDeps(st, all)

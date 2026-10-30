@@ -84,8 +84,8 @@ public final class SubParser {
         if (n.contains("авто") || n.contains("auto")) {
             s.group = Server.EXCLUDED;
             s.excludeReason = "Автовыбор провайдера, дублирует наш";
-        } else if (n.contains("lte") || n.contains("белые списки") || n.contains("белый список") || n.contains("whitelist")) {
-            // checked before Russia: "Russia 52 → [Белые списки]" is a white-list bypass server, not a Russian exit
+        } else if (n.contains("lte") || n.contains("белые списки") || n.contains("белый список") || n.contains("белый интернет") || n.contains("whitelist") || n.contains("white internet")) {
+            // checked before Russia: "Russia 52 → [Белые списки]" or "🇷🇺 Белый интернет #1" is a white-list bypass server, not a Russian exit
             s.group = Server.LTE;
         } else if (s.rawName.contains("🇷🇺") || n.contains("россия") || n.contains("russia")) {
             s.group = Server.EXCLUDED;
