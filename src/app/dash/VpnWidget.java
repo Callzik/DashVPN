@@ -211,7 +211,8 @@ public class VpnWidget extends AppWidgetProvider {
         }
         Random rnd = new Random(7);
         int n = Math.max(24, (int) (wDp * hDp / (big ? 700f : 260f)));
-        float bright = state == AppState.ON ? 1.4f : 1f;
+        // streaks run under the text in the 1-row widget: dimmer there
+        float bright = state == AppState.ON ? 1.4f : state == AppState.CONNECTING && !big ? 0.6f : 1f;
         p.setStrokeCap(Paint.Cap.ROUND);
         for (int i = 0; i < n; i++) {
             float x = rnd.nextFloat() * w, y = rnd.nextFloat() * h, s = rnd.nextFloat();
