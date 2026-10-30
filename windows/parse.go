@@ -121,7 +121,7 @@ func classify(s *Server) {
 	case strings.Contains(n, "авто") || strings.Contains(n, "auto"):
 		s.Group = GroupExcluded
 		s.ExcludeReason = "Автовыбор провайдера, дублирует встроенный"
-	case strings.Contains(n, "lte") || strings.Contains(n, "белые списки") || strings.Contains(n, "белый список") || strings.Contains(n, "whitelist"):
+	case strings.Contains(n, "lte") || strings.Contains(n, "белые списки") || strings.Contains(n, "белый список") || strings.Contains(n, "белый интернет") || strings.Contains(n, "whitelist") || strings.Contains(n, "white internet"):
 		s.Group = GroupLTE
 	case strings.Contains(s.RawName, "🇷🇺") || strings.Contains(n, "россия") || strings.Contains(n, "russia"):
 		s.Group = GroupExcluded

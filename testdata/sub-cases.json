@@ -585,5 +585,42 @@
    }
   ],
   "warnings": 0
+ },
+ {
+  "name": "white internet goes to LTE",
+  "sub": "vless://11111111-2222-3333-4444-555555555555@176.108.242.15:1505?type=grpc\u0026security=reality\u0026sni=s.example.ru\u0026fp=chrome\u0026pbk=K\u0026sid=ab\u0026serviceName=grpc#%F0%9F%87%B7%F0%9F%87%BA%20%D0%91%D0%B5%D0%BB%D1%8B%D0%B9%20%D0%B8%D0%BD%D1%82%D0%B5%D1%80%D0%BD%D0%B5%D1%82%20%231%20%7C%20%D0%92%D1%81%D0%B5%20%D0%BE%D0%BF%D0%B5%D1%80%D0%B0%D1%82%D0%BE%D1%80%D1%8B",
+  "servers": [
+   {
+    "name": "🇷🇺 Белый интернет #1 | Все операторы",
+    "group": 1,
+    "host": "176.108.242.15",
+    "outbound": {
+     "packet_encoding": "xudp",
+     "server": "176.108.242.15",
+     "server_port": 1505,
+     "tag": "srv1",
+     "tls": {
+      "enabled": true,
+      "reality": {
+       "enabled": true,
+       "public_key": "K",
+       "short_id": "ab"
+      },
+      "server_name": "s.example.ru",
+      "utls": {
+       "enabled": true,
+       "fingerprint": "chrome"
+      }
+     },
+     "transport": {
+      "service_name": "grpc",
+      "type": "grpc"
+     },
+     "type": "vless",
+     "uuid": "11111111-2222-3333-4444-555555555555"
+    }
+   }
+  ],
+  "warnings": 0
  }
 ]
