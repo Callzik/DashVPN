@@ -124,6 +124,10 @@ public final class Changelog {
                 "Виджет спокойнее: без подключения приглушённые звёзды, при подключении фиолетовое сияние у кнопки",
                 "Квадратный виджет 2×2: кнопка, таймер, флаг и пинг",
         });
+        ENTRIES.put(61, new String[]{
+                "Конфиги-цепочки: сервер, который ходит через другой сервер, теперь подключается по цепочке, а не напрямую",
+                "Поддержка новых Xray-конфигов: короткая запись сервера и VLESS Encryption",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

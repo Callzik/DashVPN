@@ -504,5 +504,86 @@
    }
   ],
   "warnings": 0
+ },
+ {
+  "name": "xray chains, flat settings, vless encryption",
+  "sub": "[{\"remarks\": \"Премиум-конфиг (ранний доступ)\", \"outbounds\": [{\"protocol\": \"vless\", \"tag\": \"proxy\", \"settings\": {\"address\": \"exit.example.com\", \"port\": 443, \"id\": \"11111111-2222-3333-4444-555555555555\", \"encryption\": \"none\", \"flow\": \"xtls-rprx-vision\"}, \"streamSettings\": {\"network\": \"tcp\", \"security\": \"reality\", \"realitySettings\": {\"serverName\": \"www.microsoft.com\", \"publicKey\": \"PBK\", \"shortId\": \"ab\"}, \"sockopt\": {\"dialerProxy\": \"bridge\"}}}, {\"protocol\": \"vless\", \"tag\": \"bridge\", \"settings\": {\"vnext\": [{\"address\": \"84.23.52.204\", \"port\": 43000, \"users\": [{\"id\": \"11111111-2222-3333-4444-555555555555\", \"encryption\": \"none\"}]}]}, \"streamSettings\": {\"network\": \"tcp\", \"security\": \"reality\", \"realitySettings\": {\"serverName\": \"ya.ru\", \"publicKey\": \"PBK2\", \"shortId\": \"cd\"}}}, {\"protocol\": \"freedom\", \"tag\": \"direct\"}]}, {\"remarks\": \"PQ\", \"outbounds\": [{\"protocol\": \"vless\", \"tag\": \"proxy\", \"settings\": {\"address\": \"pq.example.com\", \"port\": 443, \"id\": \"11111111-2222-3333-4444-555555555555\", \"encryption\": \"mlkem768x25519plus.native.0rtt.KEY\"}, \"streamSettings\": {\"network\": \"tcp\"}}]}, {\"remarks\": \"Flat trojan\", \"outbounds\": [{\"protocol\": \"trojan\", \"settings\": {\"address\": \"tr.example.com\", \"port\": 443, \"password\": \"pw\"}, \"streamSettings\": {\"security\": \"tls\", \"tlsSettings\": {\"serverName\": \"tr.example.com\"}}}]}]",
+  "servers": [
+   {
+    "name": "Премиум-конфиг (ранний доступ)",
+    "group": 0,
+    "host": "exit.example.com",
+    "outbound": {
+     "server": "127.0.0.1",
+     "server_port": 0,
+     "tag": "srv1",
+     "type": "socks",
+     "version": "5"
+    },
+    "xray": {
+     "protocol": "vless",
+     "settings": {
+      "address": "exit.example.com",
+      "encryption": "none",
+      "flow": "xtls-rprx-vision",
+      "id": "11111111-2222-3333-4444-555555555555",
+      "port": 443
+     },
+     "streamSettings": {
+      "network": "tcp",
+      "realitySettings": {
+       "publicKey": "PBK",
+       "serverName": "www.microsoft.com",
+       "shortId": "ab"
+      },
+      "security": "reality",
+      "sockopt": {
+       "dialerProxy": "bridge"
+      }
+     }
+    }
+   },
+   {
+    "name": "PQ",
+    "group": 0,
+    "host": "pq.example.com",
+    "outbound": {
+     "server": "127.0.0.1",
+     "server_port": 0,
+     "tag": "srv2",
+     "type": "socks",
+     "version": "5"
+    },
+    "xray": {
+     "protocol": "vless",
+     "settings": {
+      "address": "pq.example.com",
+      "encryption": "mlkem768x25519plus.native.0rtt.KEY",
+      "id": "11111111-2222-3333-4444-555555555555",
+      "port": 443
+     },
+     "streamSettings": {
+      "network": "tcp"
+     }
+    }
+   },
+   {
+    "name": "Flat trojan",
+    "group": 0,
+    "host": "tr.example.com",
+    "outbound": {
+     "password": "pw",
+     "server": "tr.example.com",
+     "server_port": 443,
+     "tag": "srv3",
+     "tls": {
+      "enabled": true,
+      "server_name": "tr.example.com"
+     },
+     "type": "trojan"
+    }
+   }
+  ],
+  "warnings": 0
  }
 ]
