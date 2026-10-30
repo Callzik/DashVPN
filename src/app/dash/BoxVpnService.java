@@ -154,7 +154,8 @@ public class BoxVpnService extends VpnService {
         destroying = true;
         cancelPause();
         unlock();
-        stopVpn(null);
+        // the system destroyed the service while connected (memory, battery saver): say so in the journal
+        stopVpn(running && !stopping ? "Служба VPN остановлена системой" : null);
         super.onDestroy();
     }
 
@@ -192,7 +193,7 @@ public class BoxVpnService extends VpnService {
     private void fail(String message) {
         if (!running) return; // stopped by the user: not an error
         AppState.error = message;
-        stopVpn(null);
+        stopVpn("Отключено: " + message);
         AppState.error = message;
         AppState.changed();
     }
@@ -1571,7 +1572,7 @@ public class BoxVpnService extends VpnService {
                         }
                         // keep URL-test results and problems, drop per-connection noise
                         if (l.startsWith("DEBUG") && !l.contains("unavailable") && !l.contains("available:")) continue;
-                        if (l.contains("inbound connection") || l.contains("outbound connection")
+                        if (l.contains("dns: exchanged") || l.contains("inbound connection") || l.contains("outbound connection")
                                 || l.contains("inbound packet connection") || l.contains("outbound packet connection")) continue;
                         AppState.log(l);
                     }
@@ -1633,7 +1634,7 @@ public class BoxVpnService extends VpnService {
                         String line;
                         while ((line = r.readLine()) != null) {
                             String l = stripAnsi(line).trim();
-                            if (l.isEmpty() || l.contains("[Info]") || l.contains("[Debug]")) continue;
+                            if (l.isEmpty() || l.contains("[Info]") || l.contains("[Debug]") || l.contains(" accepted ")) continue;
                             AppState.log("Xray: " + l);
                         }
                     } catch (Exception ignored) {
