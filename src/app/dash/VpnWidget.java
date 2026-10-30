@@ -21,10 +21,11 @@ import android.widget.RemoteViews;
 
 import java.util.Random;
 
-/** Home screen widgets (1-row and 4×4, see VpnWidgetBig) in the look of the main screen: night sky, power button, timer, server and ping. */
+/** Home screen widgets (1-row, 4×4 VpnWidgetBig, 2×2 VpnWidgetSquare) in the look of the main screen: night sky, power button, timer, server and ping. */
 public class VpnWidget extends AppWidgetProvider {
     static final String ACTION_TOGGLE = "app.dash.WIDGET_TOGGLE";
     private static final int GOOD = 0xFF6BD68A;
+    private static final int ROW = 0, BIG = 1, SQUARE = 2;
 
     @Override
     public void onUpdate(Context c, AppWidgetManager m, int[] ids) {
@@ -56,18 +57,20 @@ public class VpnWidget extends AppWidgetProvider {
     }
 
     static void updateAll(Context c, AppWidgetManager m) {
-        update(c, m, false);
-        update(c, m, true);
+        update(c, m, ROW);
+        update(c, m, BIG);
+        update(c, m, SQUARE);
     }
 
-    private static void update(Context c, AppWidgetManager m, boolean big) {
-        int[] ids = m.getAppWidgetIds(new ComponentName(c, big ? VpnWidgetBig.class : VpnWidget.class));
+    private static void update(Context c, AppWidgetManager m, int kind) {
+        int[] ids = m.getAppWidgetIds(new ComponentName(c, kind == BIG ? VpnWidgetBig.class : kind == SQUARE ? VpnWidgetSquare.class : VpnWidget.class));
         if (ids == null) return;
-        for (int id : ids) m.updateAppWidget(id, views(c, m, id, big));
+        for (int id : ids) m.updateAppWidget(id, views(c, m, id, kind));
     }
 
-    private static RemoteViews views(Context c, AppWidgetManager m, int id, boolean big) {
-        RemoteViews v = new RemoteViews(c.getPackageName(), big ? R.layout.widget_big : R.layout.widget);
+    private static RemoteViews views(Context c, AppWidgetManager m, int id, int kind) {
+        boolean big = kind == BIG;
+        RemoteViews v = new RemoteViews(c.getPackageName(), big ? R.layout.widget_big : kind == SQUARE ? R.layout.widget_square : R.layout.widget);
         int state = AppState.vpn;
         boolean paused = state == AppState.OFF && AppState.pausedUntil > 0;
         boolean manual = !AppState.pinned.isEmpty();
@@ -141,7 +144,7 @@ public class VpnWidget extends AppWidgetProvider {
 
         v.setInt(R.id.widget_btn, "setBackgroundResource", btnBg);
         v.setInt(R.id.widget_btn, "setColorFilter", iconColor);
-        Bitmap sky = sky(c, m, id, paused ? AppState.OFF : state, big);
+        Bitmap sky = sky(c, m, id, state == AppState.ON ? AppState.ON : AppState.OFF, kind);
         if (sky != null) v.setImageViewBitmap(R.id.widget_sky, sky);
 
         PendingIntent pi;
@@ -167,23 +170,24 @@ public class VpnWidget extends AppWidgetProvider {
         return sp;
     }
 
-    private static final String[] skyKey = new String[2];
-    private static final Bitmap[] skyBmp = new Bitmap[2];
+    private static final String[] skyKey = new String[3];
+    private static final Bitmap[] skyBmp = new Bitmap[3];
 
     /**
      * The sky at the widget's size, drawn at about 1.5 px per dp to keep the bitmap small for the launcher.
-     * Off: dim stars. Connecting: streaks flying from the button. On: brighter stars and a nebula around the button.
+     * Connected: stars and a violet glow around the button; otherwise dim stars only.
      */
-    private static Bitmap sky(Context c, AppWidgetManager m, int id, int state, boolean big) {
+    private static Bitmap sky(Context c, AppWidgetManager m, int id, int state, int kind) {
         Bundle o = m.getAppWidgetOptions(id);
         int wDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH);
         int hDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT);
-        if (wDp <= 0) wDp = big ? 300 : 250;
-        if (hDp <= 0) hDp = big ? 300 : 64;
+        boolean big = kind != ROW;
+        if (wDp <= 0) wDp = kind == BIG ? 300 : kind == SQUARE ? 150 : 250;
+        if (hDp <= 0) hDp = kind == BIG ? 300 : kind == SQUARE ? 150 : 64;
         float k = Math.min(1.5f, (big ? 450f : 600f) / wDp);
         int w = Math.max(1, Math.round(wDp * k)), h = Math.max(1, Math.round(hDp * k));
         String key = w + "x" + h + ":" + state;
-        int slot = big ? 1 : 0;
+        int slot = kind;
         synchronized (VpnWidget.class) {
             if (key.equals(skyKey[slot]) && skyBmp[slot] != null) return skyBmp[slot];
         }
@@ -196,40 +200,30 @@ public class VpnWidget extends AppWidgetProvider {
         Canvas cv = new Canvas(b);
         cv.drawColor(Ui.BG);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        // centre of the power button: 10dp padding + 22dp radius from the left edge; big one: middle, a bit up
-        float bx = big ? w / 2f : 32 * k, by = big ? h * 0.42f : h / 2f;
-        float sc = big ? 1.4f : 1f;
-        if (state == AppState.ON || state == AppState.WAITING) {
-            int[] cols = state == AppState.ON ? new int[]{0x8B7CFF, 0x5A3CC8, 0xC878FF} : new int[]{0xF2B544, 0x8A5A1E, 0xF2B544};
-            float[][] blobs = {{0, 0, 120, 0.34f}, {90, 20, 110, 0.18f}, {200, -30, 130, 0.10f}};
-            for (int i = 0; i < blobs.length; i++) {
-                float x = bx + blobs[i][0] * k * (big ? 0.5f : 1f), y = by + blobs[i][1] * k * sc, r = blobs[i][2] * k * sc;
-                p.setShader(new RadialGradient(x, y, r, (Math.round(blobs[i][3] * 255) << 24) | cols[i], cols[i] & 0x00FFFFFF, Shader.TileMode.CLAMP));
-                cv.drawCircle(x, y, r, p);
-            }
-            p.setShader(null);
-        }
+        // centre of the power button: 10dp padding + 22dp radius from the left edge; square ones: middle, a bit up
+        float bx = big ? w / 2f : 32 * k, by = big ? h * (kind == BIG ? 0.42f : 0.38f) : h / 2f;
+        boolean on = state == AppState.ON;
         Random rnd = new Random(7);
         int n = Math.max(24, (int) (wDp * hDp / (big ? 700f : 260f)));
-        // streaks run under the text in the 1-row widget: dimmer there
-        float bright = state == AppState.ON ? 1.4f : state == AppState.CONNECTING && !big ? 0.6f : 1f;
-        p.setStrokeCap(Paint.Cap.ROUND);
         for (int i = 0; i < n; i++) {
             float x = rnd.nextFloat() * w, y = rnd.nextFloat() * h, s = rnd.nextFloat();
             float r = k * (0.4f + s * s * 0.9f);
-            float a = Math.min(1f, (0.15f + rnd.nextFloat() * 0.45f) * bright);
+            // off: dim stars; on: a bit brighter
+            float a = Math.min(1f, (0.15f + rnd.nextFloat() * 0.45f) * (on ? 1.15f : 0.55f));
             int col = rnd.nextFloat() < 0.2f ? 0xC9C0FF : 0xFFFFFF;
             p.setColor((Math.round(a * 255) << 24) | col);
-            if (state == AppState.CONNECTING) {
-                // jump: each star stretched into a line pointing away from the button
-                float dx = x - bx, dy = y - by, d = (float) Math.hypot(dx, dy);
-                if (d < 1) continue;
-                float len = Math.min(d * 0.5f, k * sc * (6 + 22 * s));
-                p.setStrokeWidth(r * 1.4f);
-                cv.drawLine(x - dx / d * len, y - dy / d * len, x, y, p);
-            } else {
-                cv.drawCircle(x, y, r, p);
+            cv.drawCircle(x, y, r, p);
+        }
+        if (on) { // violet glow around the button
+            float rad = (kind == BIG ? 110 : kind == SQUARE ? 70 : 60) * k;
+            float[][] glow = {{rad, 0.55f}, {rad * 1.8f, 0.18f}};
+            int[] cols = {0x8B7CFF, 0x6E50E6};
+            for (int i = 0; i < glow.length; i++) {
+                int c0 = (Math.round(glow[i][1] * 255) << 24) | cols[i], c1 = (Math.round(glow[i][1] * 0.4f * 255) << 24) | cols[i];
+                p.setShader(new RadialGradient(bx, by, glow[i][0], new int[]{c0, c1, cols[i]}, new float[]{0, 0.45f, 1}, Shader.TileMode.CLAMP));
+                cv.drawCircle(bx, by, glow[i][0], p);
             }
+            p.setShader(null);
         }
         synchronized (VpnWidget.class) {
             skyKey[slot] = key;
