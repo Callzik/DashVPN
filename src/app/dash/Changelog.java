@@ -116,6 +116,10 @@ public final class Changelog {
         ENTRIES.put(58, new String[]{
                 "Журнал чище: без строк о каждом соединении и DNS-запросе, видны пинг и ошибки серверов",
         });
+        ENTRIES.put(59, new String[]{
+                "Виджет в космическом стиле: звёзды, туманность при подключении, таймер, флаг и пинг сервера",
+                "Большой виджет 4×4: кнопка, таймер и карточка сервера, как на главном экране",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

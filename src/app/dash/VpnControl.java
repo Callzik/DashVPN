@@ -26,7 +26,8 @@ final class VpnControl {
             AppState.addListener(new Runnable() {
                 private String last = "";
                 @Override public void run() {
-                    String key = AppState.vpn + "|" + AppState.pausedUntil + "|" + AppState.serverName + "|" + AppState.ping + "|" + AppState.phase;
+                    String key = AppState.vpn + "|" + AppState.pausedUntil + "|" + AppState.serverName + "|" + AppState.ping + "|" + AppState.phase
+                            + "|" + AppState.error + "|" + AppState.pinned + "|" + AppState.since + "|" + AppState.switching + "|" + AppState.pingingCurrent;
                     if (key.equals(last)) return;
                     last = key;
                     refreshOutside(app);
