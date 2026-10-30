@@ -154,7 +154,8 @@ public class BoxVpnService extends VpnService {
         destroying = true;
         cancelPause();
         unlock();
-        stopVpn(null);
+        // the system destroyed the service while connected (memory, battery saver): say so in the journal
+        stopVpn(running && !stopping ? "Служба VPN остановлена системой" : null);
         super.onDestroy();
     }
 
@@ -192,7 +193,7 @@ public class BoxVpnService extends VpnService {
     private void fail(String message) {
         if (!running) return; // stopped by the user: not an error
         AppState.error = message;
-        stopVpn(null);
+        stopVpn("Отключено: " + message);
         AppState.error = message;
         AppState.changed();
     }
