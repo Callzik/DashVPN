@@ -129,6 +129,9 @@ public final class Changelog {
                 "Конфиги-цепочки: сервер, который ходит через другой сервер, теперь подключается по цепочке, а не напрямую",
                 "Поддержка новых Xray-конфигов: короткая запись сервера и VLESS Encryption",
         });
+        ENTRIES.put(62, new String[]{
+                "Замер скорости 20 серверов: автовыбор сравнивает до 20 серверов с лучшим пингом, а не 3, и переходит на самый быстрый",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
