@@ -23,15 +23,17 @@ import java.util.concurrent.TimeUnit;
 /** Talks to the sing-box Clash API on localhost. */
 public final class Clash {
     private final String secret;
+    private final long spentAt = Speed.spent(); // speed check bytes before this core started
 
     public Clash(String secret) { this.secret = secret; }
 
     String secret() { return secret; }
 
-    /** Bytes {down, up} the core has moved since it started. */
+    /** Bytes {down, up} the core has moved since it started, without the speed and load checks' own downloads. */
     long[] totals() throws Exception {
         JSONObject o = new JSONObject(call("GET", "/connections", null, 3000));
-        return new long[]{o.optLong("downloadTotal", 0), o.optLong("uploadTotal", 0)};
+        long down = Math.max(0, o.optLong("downloadTotal", 0) - (Speed.spent() - spentAt));
+        return new long[]{down, o.optLong("uploadTotal", 0)};
     }
 
     private String call(String method, String path, String body, int readTimeout) throws Exception {

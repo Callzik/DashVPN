@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,6 +19,9 @@ var SpeedURL = "https://speed.cloudflare.com/__down?bytes=2000000"
 // LoadURL is the load check's file: a server can answer the watchdog's tiny ping request and still stall every
 // real download (censors freeze such connections after the first 16–20 KB), so a small file has to arrive in full.
 var LoadURL = "https://speed.cloudflare.com/__down?bytes=131072"
+
+// testBytes counts what the speed and load checks downloaded, so the traffic shown to the user leaves it out.
+var testBytes atomic.Int64
 
 // QuickURL is the quick round's smaller file.
 var QuickURL = "https://speed.cloudflare.com/__down?bytes=1000000"
@@ -139,6 +143,7 @@ func download(u string, window time.Duration, port int, tag, secret string) (int
 	for {
 		k, err := resp.Body.Read(buf)
 		if k > 0 {
+			testBytes.Add(int64(k))
 			all += int64(k)
 			if start.IsZero() {
 				start = time.Now()

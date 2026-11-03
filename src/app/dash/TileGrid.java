@@ -318,7 +318,7 @@ public class TileGrid extends ViewGroup {
         float left = Math.max(getPaddingLeft(), Math.min(getWidth() - getPaddingRight() - v.getWidth(), x - grabX));
         float top = Math.max(getPaddingTop(), y - grabY);
         int c = Math.round((left - getPaddingLeft()) / (cellW() + gap));
-        int r = Math.round(top / (rowH + gap));
+        int r = Math.round((top - getPaddingTop()) / (rowH + gap));
         c = Math.max(0, Math.min(Tiles.COLS - s.w, c));
         r = Math.max(0, Math.min(Tiles.rows(before), r)); // down to the spare row
         if (c != s.c || r != s.r) apply(c, r, s.w, s.h);
@@ -334,8 +334,8 @@ public class TileGrid extends ViewGroup {
         int c0 = start.c, r0 = start.r, c1 = start.c + start.w, r1 = start.r + start.h; // edges in cells
         if (right) c1 = Math.round((x + gap / 2f - getPaddingLeft()) / (cw + gap));
         else c0 = Math.round((x + gap / 2f - getPaddingLeft()) / (cw + gap));
-        if (bottom) r1 = Math.round((y + gap / 2f) / (rowH + gap));
-        else r0 = Math.round((y + gap / 2f) / (rowH + gap));
+        if (bottom) r1 = Math.round((y + gap / 2f - getPaddingTop()) / (rowH + gap));
+        else r0 = Math.round((y + gap / 2f - getPaddingTop()) / (rowH + gap));
         if (right) c1 = Math.max(c0 + 1, Math.min(Tiles.COLS, c1));
         else c0 = Math.max(0, Math.min(c1 - 1, c0));
         if (bottom) r1 = Math.max(r0 + 1, Math.min(r0 + Tiles.MAX_H, r1));

@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
@@ -30,6 +31,11 @@ import javax.net.ssl.SSLSocketFactory;
  */
 public final class Speed {
     static String url = "https://speed.cloudflare.com/__down?bytes=2000000";
+    /** Bytes the speed and load checks downloaded, so the traffic shown to the user leaves them out. */
+    private static final AtomicLong spent = new AtomicLong();
+
+    static long spent() { return spent.get(); }
+
     /** Best servers by ping that get a test download. */
     static final int CANDIDATES = 20;
     /** Leaders of the quick round that are measured again one by one (plus the current server). */
@@ -170,6 +176,7 @@ public final class Speed {
             int k;
             while ((k = in.read(buf)) > 0) {
                 all += k;
+                spent.addAndGet(k);
                 if (start == 0) start = System.nanoTime();
                 else n += k;
                 if ((System.nanoTime() - start) / 1000000 > windowMs) break;

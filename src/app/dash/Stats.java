@@ -89,23 +89,27 @@ final class Stats {
     }
 
     private static void lookup(String secret) {
+        // a failed lookup must not leave the previous server's IP on screen
+        String newIp = "", newCc = "";
         try {
             org.json.JSONObject o = new org.json.JSONObject(
                     getViaProbe(secret, "ip-api.com", "/json/?fields=status,query,countryCode"));
             if (!"success".equals(o.optString("status"))) throw new Exception("ip-api: " + o);
-            ip = o.optString("query", "");
-            cc = o.optString("countryCode", "").toUpperCase(Locale.ROOT);
+            newIp = o.optString("query", "");
+            newCc = o.optString("countryCode", "").toUpperCase(Locale.ROOT);
         } catch (Exception e) {
             try {
                 org.json.JSONObject o = new org.json.JSONObject(getViaProbe(secret, "ipwho.is", "/?fields=ip,country_code"));
-                ip = o.optString("ip", "");
-                cc = o.optString("country_code", "").toUpperCase(Locale.ROOT);
+                newIp = o.optString("ip", "");
+                newCc = o.optString("country_code", "").toUpperCase(Locale.ROOT);
             } catch (Exception e2) {
                 AppState.log("Не удалось узнать внешний IP: " + e2.getMessage());
             }
         }
-        country = cc.length() == 2 ? new Locale("", cc).getDisplayCountry(new Locale("ru")) : "";
-        ipFailed = ip.isEmpty();
+        country = newCc.length() == 2 ? new Locale("", newCc).getDisplayCountry(new Locale("ru")) : "";
+        cc = newCc;
+        ip = newIp;
+        ipFailed = newIp.isEmpty();
         ipBusy = false;
     }
 
