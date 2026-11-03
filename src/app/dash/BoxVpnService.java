@@ -941,8 +941,8 @@ public class BoxVpnService extends VpnService {
     }
 
     /**
-     * Downloads a test file through the best few servers by ping, one after another, and moves to one that is
-     * clearly faster than the current (an overloaded server answers pings quickly but downloads slowly).
+     * Downloads a test file through up to 20 best servers by ping (a quick round, a few at a time), then through
+     * the leaders and the current one again one by one, and moves to one that is clearly faster than the current (an overloaded server answers pings quickly but downloads slowly).
      * Runs after connecting and after a network change. The downloads run on their own thread, so the
      * watchdog and network changes are not held up.
      */
@@ -961,7 +961,24 @@ public class BoxVpnService extends VpnService {
             @Override public void run() {
                 final Map<String, Double> speeds = new HashMap<>();
                 try {
-                    for (String t : picks) {
+                    List<String> fin = picks;
+                    if (picks.size() > Speed.FINALISTS + 1) {
+                        // quick round through up to 20 servers, a few at a time; the leaders go on
+                        Map<String, Double> q = Speed.quick(picks, ConfigBuilder.SPEED_PORT, c.secret(), new Speed.Alive() {
+                            @Override public boolean ok() { return running && c == clash; }
+                        });
+                        if (!running || c != clash) return;
+                        fin = Speed.finalists(q, cur);
+                        StringBuilder sb = new StringBuilder();
+                        for (String t : fin) {
+                            if (t.equals(cur) && !q.containsKey(t)) continue;
+                            if (sb.length() > 0) sb.append(", ");
+                            sb.append(nameOf(t)).append(' ').append(Speed.mbit(q.containsKey(t) ? q.get(t) : 0));
+                        }
+                        AppState.log("Скорость, быстрый замер " + q.size() + " серверов, лучшие: " + sb);
+                        if (fin.size() < 2) return;
+                    }
+                    for (String t : fin) {
                         if (!running || c != clash) return;
                         double v = Speed.measure(ConfigBuilder.SPEED_PORT, t, c.secret());
                         speeds.put(t, v);
