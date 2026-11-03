@@ -2269,7 +2269,7 @@ public class BoxVpnService extends VpnService {
 
     private void pause() {
         if (!running) {
-            if (AppState.pausedUntil == 0) stopSelf();
+            if (AppState.pausedUntil == 0 && lockPfd == null) stopSelf(); // an old notification: keep the lock
             return;
         }
         stopVpn("Пауза на " + PAUSE_MS / 60000 + " минут", true);

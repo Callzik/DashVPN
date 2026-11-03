@@ -16,10 +16,11 @@ import (
 type Clash struct {
 	base, secret string
 	hc           *http.Client
+	testAt       int64 // testBytes when this core started
 }
 
 func NewClash(port int, secret string) *Clash {
-	return &Clash{base: "http://127.0.0.1:" + strconv.Itoa(port), secret: secret,
+	return &Clash{base: "http://127.0.0.1:" + strconv.Itoa(port), secret: secret, testAt: testBytes.Load(),
 		hc: &http.Client{Transport: &http.Transport{Proxy: nil, DisableKeepAlives: true}}}
 }
 
@@ -218,7 +219,8 @@ func (c *Clash) GroupCheck(group string, timeoutMs int) map[string]int {
 	return res
 }
 
-// Totals returns the bytes downloaded and uploaded through the core since it started.
+// Totals returns the bytes downloaded and uploaded through the core since it started,
+// without the speed and load checks' own downloads.
 func (c *Clash) Totals() (down, up int64, ok bool) {
 	b, err := c.call("GET", "/connections", nil, 2*time.Second)
 	if err != nil {
@@ -231,7 +233,7 @@ func (c *Clash) Totals() (down, up int64, ok bool) {
 	if json.Unmarshal(b, &r) != nil {
 		return 0, 0, false
 	}
-	return r.Down, r.Up, true
+	return max(0, r.Down-(testBytes.Load()-c.testAt)), r.Up, true
 }
 
 func (c *Clash) CloseAll() { _, _ = c.call("DELETE", "/connections", nil, 4*time.Second) }
