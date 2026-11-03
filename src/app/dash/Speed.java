@@ -12,6 +12,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
@@ -19,15 +23,26 @@ import javax.net.ssl.SSLSocketFactory;
 
 /**
  * Speed check: the lowest ping is not always the fastest (an overloaded server answers quickly but downloads
- * slowly). A test file is downloaded through the best few servers by ping via the core's speed-in proxy,
- * where the login (= server tag) sends the request to that server only.
+ * slowly). A test file is downloaded through the best servers by ping via the core's speed-in proxy,
+ * where the login (= server tag) sends the request to that server only. Two rounds: a short download through
+ * up to 20 servers, a few at a time, then the leaders and the current one again one by one, so they do not
+ * share the line and the comparison is fair.
  */
 public final class Speed {
     static String url = "https://speed.cloudflare.com/__down?bytes=2000000";
     /** Best servers by ping that get a test download. */
-    static final int CANDIDATES = 3;
+    static final int CANDIDATES = 20;
+    /** Leaders of the quick round that are measured again one by one (plus the current server). */
+    static final int FINALISTS = 3;
+    /** Quick round downloads running at once. */
+    static final int PARALLEL = 4;
+    /** Spare servers the load check tries when the current one stalls. */
+    static final int SPARES = 3;
     /** A download stops after this long even if unfinished. */
     static final long WINDOW_MS = 4000;
+    /** The quick round: a smaller file and a shorter window. */
+    static String quickUrl = "https://speed.cloudflare.com/__down?bytes=1000000";
+    static final long QUICK_WINDOW_MS = 2000;
 
     /**
      * Load check: a server can answer the watchdog's tiny ping request and still stall every real download
@@ -41,13 +56,62 @@ public final class Speed {
 
     /** Mbit/s through one server, 0 on failure. */
     public static double measure(int port, String tag, String secret) {
+        return measure(url, WINDOW_MS, port, tag, secret);
+    }
+
+    private static double measure(String url, long windowMs, int port, String tag, String secret) {
         try {
-            double[] r = download(url, WINDOW_MS, port, tag, secret);
+            double[] r = download(url, windowMs, port, tag, secret);
             if (r[1] < 64 * 1024 || r[2] <= 0) return 0;
             return r[1] * 8 / r[2] / 1e6;
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    /**
+     * The quick round: a short download through every tag, PARALLEL at a time. Stops early when alive turns
+     * false (the VPN went off). Returns tag → Mbit/s for the tags that were measured.
+     */
+    public static Map<String, Double> quick(List<String> tags, final int port, final String secret, final Alive alive) {
+        final Map<String, Double> out = new ConcurrentHashMap<>();
+        ExecutorService pool = Executors.newFixedThreadPool(Math.max(1, Math.min(PARALLEL, tags.size())));
+        try {
+            for (final String t : tags) {
+                pool.execute(new Runnable() {
+                    @Override public void run() {
+                        if (alive.ok()) out.put(t, measure(quickUrl, QUICK_WINDOW_MS, port, t, secret));
+                    }
+                });
+            }
+            pool.shutdown();
+            pool.awaitTermination(5, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            pool.shutdownNow();
+        }
+        return out;
+    }
+
+    /** Whether a long check should go on. */
+    public interface Alive {
+        boolean ok();
+    }
+
+    /** The FINALISTS fastest of the quick round that downloaded anything, plus the current server. */
+    static List<String> finalists(final Map<String, Double> quick, String cur) {
+        List<String> top = new ArrayList<>();
+        for (Map.Entry<String, Double> e : quick.entrySet()) if (e.getValue() > 0) top.add(e.getKey());
+        Collections.sort(top, new Comparator<String>() {
+            @Override public int compare(String a, String b) {
+                int c = Double.compare(quick.get(b), quick.get(a));
+                return c != 0 ? c : a.compareTo(b);
+            }
+        });
+        if (top.size() > FINALISTS) top = new ArrayList<>(top.subList(0, FINALISTS));
+        if (cur != null && !cur.isEmpty() && !top.contains(cur)) top.add(cur);
+        return top;
     }
 
     /** True when the load check file comes through one server in full. */
@@ -133,26 +197,31 @@ public final class Speed {
         return sb.toString();
     }
 
-    /** The best few members by ping, plus the current one. */
+    /** The best members by ping, plus the current one. */
     static List<String> picks(List<String> members, Map<String, Integer> delays, String cur) {
         return picks(members, delays, cur, Collections.<String>emptySet());
     }
 
-    /** The best few members by ping that are not in skip, plus the current one. */
+    /** The CANDIDATES best members by ping that are not in skip, plus the current one. */
     static List<String> picks(List<String> members, Map<String, Integer> delays, String cur, Set<String> skip) {
-        List<String> alive = spares(members, delays, skip);
+        List<String> alive = best(members, delays, skip, CANDIDATES);
         if (cur != null && !cur.isEmpty() && !alive.contains(cur)) alive.add(cur);
         return alive;
     }
 
-    /** The best few members by ping that answer and are not in skip. */
-    static List<String> spares(List<String> members, final Map<String, Integer> delays, Set<String> skip) {
+    /** The SPARES best members by ping that answer and are not in skip. */
+    static List<String> spares(List<String> members, Map<String, Integer> delays, Set<String> skip) {
+        return best(members, delays, skip, SPARES);
+    }
+
+    /** The n best members by ping that answer and are not in skip. */
+    static List<String> best(List<String> members, final Map<String, Integer> delays, Set<String> skip, int n) {
         List<String> alive = new ArrayList<>();
         for (String t : members) if (delays.containsKey(t) && delays.get(t) > 0 && !skip.contains(t)) alive.add(t);
         Collections.sort(alive, new Comparator<String>() {
             @Override public int compare(String a, String b) { return delays.get(a) - delays.get(b); }
         });
-        if (alive.size() > CANDIDATES) alive = new ArrayList<>(alive.subList(0, CANDIDATES));
+        if (alive.size() > n) alive = new ArrayList<>(alive.subList(0, n));
         return alive;
     }
 

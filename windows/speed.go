@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -18,9 +19,16 @@ var SpeedURL = "https://speed.cloudflare.com/__down?bytes=2000000"
 // real download (censors freeze such connections after the first 16–20 KB), so a small file has to arrive in full.
 var LoadURL = "https://speed.cloudflare.com/__down?bytes=131072"
 
+// QuickURL is the quick round's smaller file.
+var QuickURL = "https://speed.cloudflare.com/__down?bytes=1000000"
+
 const (
-	speedCandidates = 3               // best servers by ping that get a test download
+	speedCandidates = 20              // best servers by ping that get a test download
+	speedFinalists  = 3               // quick round leaders measured again one by one (plus the current server)
+	speedParallel   = 4               // quick round downloads running at once
+	spareCount      = 3               // spare servers the load check tries when the current one stalls
 	speedWindow     = 4 * time.Second // a download stops after this long even if unfinished
+	quickWindow     = 2 * time.Second // the quick round's window
 	speedEvery      = 3 * time.Minute // at most one speed check per this period
 
 	loadMin    = 100 * 1024       // bytes a load check must get
@@ -32,11 +40,69 @@ const (
 // MeasureSpeed downloads SpeedURL through one server and returns Mbit/s, 0 on failure.
 // The core's speed-in proxy sends each login (= server tag) to that server only.
 func MeasureSpeed(port int, tag, secret string) float64 {
-	_, n, el := download(SpeedURL, speedWindow, port, tag, secret)
+	return measure(SpeedURL, speedWindow, port, tag, secret)
+}
+
+func measure(u string, window time.Duration, port int, tag, secret string) float64 {
+	_, n, el := download(u, window, port, tag, secret)
 	if n < 64*1024 || el <= 0 {
 		return 0
 	}
 	return float64(n) * 8 / el / 1e6
+}
+
+// quickRound: a short download through every tag, speedParallel at a time; stops starting new ones when
+// alive turns false. Returns tag → Mbit/s for the tags that were measured.
+func quickRound(tags []string, port int, secret string, alive func() bool) map[string]float64 {
+	out := map[string]float64{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, speedParallel)
+	for _, t := range tags {
+		wg.Add(1)
+		go func(t string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if !alive() {
+				return
+			}
+			v := measure(QuickURL, quickWindow, port, t, secret)
+			mu.Lock()
+			out[t] = v
+			mu.Unlock()
+		}(t)
+	}
+	wg.Wait()
+	return out
+}
+
+// finalists: the speedFinalists fastest of the quick round that downloaded anything, plus the current server.
+func finalists(quick map[string]float64, cur string) []string {
+	var top []string
+	for t, v := range quick {
+		if v > 0 {
+			top = append(top, t)
+		}
+	}
+	sort.Slice(top, func(i, j int) bool {
+		if quick[top[i]] != quick[top[j]] {
+			return quick[top[i]] > quick[top[j]]
+		}
+		return top[i] < top[j]
+	})
+	if len(top) > speedFinalists {
+		top = top[:speedFinalists]
+	}
+	if cur != "" {
+		for _, t := range top {
+			if t == cur {
+				return top
+			}
+		}
+		top = append(top, cur)
+	}
+	return top
 }
 
 // LoadOK: the load check file comes through one server in full.
@@ -113,9 +179,9 @@ func (c *Clash) Delays() map[string]int {
 	return out
 }
 
-// speedPicks: the best few members of a group by ping that are not in skip, plus the current one.
+// speedPicks: the speedCandidates best members of a group by ping that are not in skip, plus the current one.
 func speedPicks(members []string, delays map[string]int, cur string, skip map[string]bool) []string {
-	alive := spares(members, delays, skip)
+	alive := bestByPing(members, delays, skip, speedCandidates)
 	if cur != "" {
 		for _, t := range alive {
 			if t == cur {
@@ -127,8 +193,13 @@ func speedPicks(members []string, delays map[string]int, cur string, skip map[st
 	return alive
 }
 
-// spares: the best few members of a group by ping that answer and are not in skip.
+// spares: the spareCount best members of a group by ping that answer and are not in skip.
 func spares(members []string, delays map[string]int, skip map[string]bool) []string {
+	return bestByPing(members, delays, skip, spareCount)
+}
+
+// bestByPing: the n best members of a group by ping that answer and are not in skip.
+func bestByPing(members []string, delays map[string]int, skip map[string]bool, n int) []string {
 	var alive []string
 	for _, t := range members {
 		if delays[t] > 0 && !skip[t] {
@@ -136,8 +207,8 @@ func spares(members []string, delays map[string]int, skip map[string]bool) []str
 		}
 	}
 	sort.SliceStable(alive, func(i, j int) bool { return delays[alive[i]] < delays[alive[j]] })
-	if len(alive) > speedCandidates {
-		alive = alive[:speedCandidates]
+	if len(alive) > n {
+		alive = alive[:n]
 	}
 	return alive
 }
@@ -168,8 +239,9 @@ func mbit(v float64) string {
 }
 
 // speedCheck: the lowest ping is not always the fastest (an overloaded server answers quickly but downloads
-// slowly). Downloads a test file through the best few servers by ping, one after another, and moves to one
-// that is clearly faster than the current. Runs after connecting and after waking from sleep.
+// slowly). Downloads a short test file through up to 20 best servers by ping, a few at a time, then the
+// leaders and the current one again one by one (so they do not share the line), and moves to one that is
+// clearly faster than the current. Runs after connecting and after waking from sleep.
 func (c *Core) speedCheck(g int) {
 	c.mu.Lock()
 	port := c.speedPort
@@ -196,6 +268,26 @@ func (c *Core) speedCheck(g int) {
 	picks := speedPicks(cl.Members(group), cl.Delays(), cur, c.frozenNow())
 	if len(picks) < 2 {
 		return
+	}
+	if len(picks) > speedFinalists+1 {
+		q := quickRound(picks, port, cl.secret, func() bool { return c.current(g) })
+		if !c.current(g) {
+			return
+		}
+		picks = finalists(q, cur)
+		line := ""
+		for _, t := range picks {
+			if v, ok := q[t]; ok {
+				if line != "" {
+					line += ", "
+				}
+				line += c.nameOf(t) + " " + mbit(v)
+			}
+		}
+		c.log.Add(fmt.Sprintf("Скорость, быстрый замер %d серверов, лучшие: %s", len(q), line))
+		if len(picks) < 2 {
+			return
+		}
 	}
 	speeds := map[string]float64{}
 	for _, t := range picks {
