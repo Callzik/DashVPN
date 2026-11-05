@@ -285,6 +285,16 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
   <div class="scroll" id="applist"></div>
 </section>
 
+<!-- sites without VPN -->
+<section class="view" id="v-sites">
+  <div class="top"><button class="back" onclick="leaveSites()">←</button><h1>Сайты без VPN</h1></div>
+  <div class="card" style="margin-top:12px">
+    <input class="field" id="siteinput" placeholder="youtube.com или ссылка" onkeydown="if(event.key==='Enter')addSites($('siteinput').value)">
+    <div class="row" style="margin-top:10px"><button class="secondary grow" onclick="pasteSites()">Вставить</button><button class="secondary grow" style="color:var(--accent)" onclick="addSites($('siteinput').value)">Добавить</button></div>
+  </div>
+  <div class="scroll"><div class="card" id="sitelist" style="margin-top:12px"></div></div>
+</section>
+
 <!-- onboarding -->
 <section class="view" id="v-onb">
   <div style="margin-top:36px;font-size:28px;font-weight:700">Добавьте подписку</div>
@@ -325,6 +335,7 @@ function show(v){
   if(v==='servers'){offChanged=false;loadServers();if(S.state==='on')api('/api/ping-all')}
   if(v==='settings'||v==='spage')loadSettings();
   if(v==='apps')loadApps();
+  if(v==='sites')loadSites();
   if(v==='main')requestAnimationFrame(starsCenter);
 }
 function dur(sec){sec=Math.max(0,sec);const p=n=>String(n).padStart(2,'0');return p(Math.floor(sec/3600))+':'+p(Math.floor(sec/60)%60)+':'+p(sec%60)}
@@ -451,8 +462,8 @@ async function loadSettings(){
   $('subinfo').style.whiteSpace='pre-line';
   $('sw-ru').classList.toggle('on',!!r.ruDirect);$('sw-bl').classList.toggle('on',!!r.blockedVpn);
   $('sw-as').classList.toggle('on',!!r.autoStart);$('sw-ar').classList.toggle('on',!!r.autorun);
-  const ap=await api('/api/apps');
-  SET={subs:(r.subs||[]).length,summary:r.summary||'',updated:r.updated,ruDirect:!!r.ruDirect,autoStart:!!r.autoStart,autorun:!!r.autorun,apps:(ap.bypass||[]).length};
+  const ap=await api('/api/apps'),si=await api('/api/sites');
+  SET={subs:(r.subs||[]).length,summary:r.summary||'',updated:r.updated,ruDirect:!!r.ruDirect,autoStart:!!r.autoStart,autorun:!!r.autorun,apps:(ap.bypass||[]).length,sites:(si.sites||[]).length};
   renderMenu();
   const lg=await api('/api/log');$('log').textContent=lg.text||'Пока пусто';
 }
@@ -463,6 +474,7 @@ const IC={
   start:'<path d="M12 3.5v7.5"/><path d="M17.3 6.8a7.5 7.5 0 1 1-10.6 0"/>',
   route:'<path d="M12 21v-8L6 6M12 13l6-7"/><circle cx="6" cy="5" r="2"/><circle cx="18" cy="5" r="2"/>',
   apps:'<rect x="4" y="4" width="6.5" height="6.5" rx="2.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2.5"/>',
+  sites:'<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
   update:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5V16M8.5 12.5 12 16l3.5-3.5"/>',
   log:'<path d="M2.5 12h4l3-6.5 5 13 3-6.5h4"/>'};
 const PAGES={
@@ -470,9 +482,10 @@ const PAGES={
   start:{t:'Запуск',c:'#F2B544',k:'автозапуск windows вход трей подключаться при запуске автоподключение'},
   route:{t:'Маршрутизация',c:'#5AA9FF',k:'российские сайты ру рф напрямую заблокированные обход маршруты'},
   apps:{t:'Приложения без VPN',c:'#FF9F6B',k:'исключения программы игры exe напрямую мимо vpn split'},
+  sites:{t:'Сайты без VPN',c:'#6FC3FF',k:'сайты домены адреса исключения напрямую мимо vpn ссылка youtube ip'},
   update:{t:'Обновление',c:'#6BD68A',k:'версия обновить установить загрузка подпись'},
   log:{t:'Журнал',c:'#F0716B',k:'лог журнал ошибки диагностика скопировать поддержка'}};
-const GROUPS=[['Подключение',['start','route','apps']],['О приложении',['update','log']]];
+const GROUPS=[['Подключение',['start','route','apps','sites']],['О приложении',['update','log']]];
 let SET={},query='',page='',lastMenu='';
 function plural(n,a,b,c){const m10=n%10,m100=n%100;return m10===1&&m100!==11?a:m10>=2&&m10<=4&&(m100<12||m100>14)?b:c}
 function subText(id){
@@ -482,6 +495,7 @@ function subText(id){
     case 'start':return SET.autorun?(SET.autoStart?'С Windows, VPN включается сам':'Вместе с Windows'):SET.autoStart?'VPN включается при запуске':'Вручную';
     case 'route':return SET.ruDirect?'Российские сайты напрямую':'Весь трафик через VPN';
     case 'apps':return SET.apps?'Напрямую: '+SET.apps:'Все программы через VPN';
+    case 'sites':return SET.sites?'Напрямую: '+SET.sites:'Все сайты через VPN';
     case 'update':return UPD.version?'Доступна версия '+UPD.version:'Версия '+(S.version||'');
     default:return 'Что происходило с подключением';
   }
@@ -504,12 +518,13 @@ function renderMenu(){
 function clearSearch(){$('setsearch').value='';query='';renderMenu()}
 function openPage(id){
   if(id==='apps'){show('apps');return}
+  if(id==='sites'){show('sites');return}
   page=id;$('ptitle').textContent=PAGES[id].t;
   document.querySelectorAll('.page').forEach(e=>e.classList.toggle('on',e.dataset.page===id));
   show('spage');document.querySelector('#v-spage .scroll').scrollTop=0;
 }
 document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;
-  if(view==='spage')show('settings');else if(view==='apps')leaveApps();else if(view==='servers')leaveServers();else if(view==='settings')show('main')});
+  if(view==='spage')show('settings');else if(view==='apps')leaveApps();else if(view==='sites')leaveSites();else if(view==='servers')leaveServers();else if(view==='settings')show('main')});
 let newsShown=false;
 function showNews(list){if(newsShown||!list||!list.length)return;newsShown=true;
   $('newstitle').textContent='Dash '+S.version;$('newslist').innerHTML=list.map(newsItem).join('');
@@ -637,6 +652,23 @@ function renderApps(){
 function toggleApp(n){const i=APPS.bypass.findIndex(x=>x.toLowerCase()===n.toLowerCase());if(i>=0)APPS.bypass.splice(i,1);else APPS.bypass.push(n);appsChanged=true;renderApps()}
 function addManual(){let n=$('appsearch').value.trim();if(!n)return;if(!/\.exe$/i.test(n))n+='.exe';if(!APPS.bypass.some(x=>x.toLowerCase()===n.toLowerCase()))APPS.bypass.push(n);appsChanged=true;$('appsearch').value='';renderApps()}
 async function leaveApps(){show('settings');if(appsChanged){await api('/api/apps/set',{list:APPS.bypass});if(S.state!=='off')toast('Переподключение для применения');loadSettings()}appsChanged=false}
+/* sites without VPN */
+let SITES=[],sitesChanged=false;
+async function loadSites(){sitesChanged=false;$('siteinput').value='';SITES=(await api('/api/sites')).sites||[];renderSites()}
+function renderSites(){
+  $('sitelist').innerHTML=SITES.length?SITES.map((s,i)=>`${i?'<div class="sep"></div>':''}<div class="row"><div class="grow b ell">${esc(s.label)}</div><button class="x" title="Убрать" data-i="${i}">✕</button></div>`).join('')
+    :'<div class="m" style="text-align:center;padding:10px 0">Пока пусто</div>';
+  $('sitelist').querySelectorAll('.x').forEach(b=>b.onclick=()=>{SITES.splice(+b.dataset.i,1);sitesChanged=true;renderSites()});
+}
+async function addSites(text){if(!text.trim())return;
+  const found=(await api('/api/sites/parse',{text})).sites||[];
+  if(!found.length){toast('Это не похоже на адрес сайта');return}
+  const have=new Set(SITES.map(s=>s.site)),fresh=found.filter(s=>!have.has(s.site));
+  $('siteinput').value='';
+  if(!fresh.length){toast('Уже в списке');return}
+  SITES=[...fresh,...SITES];sitesChanged=true;renderSites()}
+async function pasteSites(){try{const t=await navigator.clipboard.readText();if(t&&t.trim())addSites(t);else toast('Буфер обмена пуст')}catch(e){$('siteinput').focus();toast('Нажмите Ctrl+V')}}
+async function leaveSites(){show('settings');if(sitesChanged){await api('/api/sites/set',{list:SITES.map(s=>s.site)});if(S.state!=='off')toast('Переподключение для применения');loadSettings()}sitesChanged=false}
 let UPD={};
 function updAction(){if(UPD.progress>=0)return;if(UPD.version)api('/api/update/install').then(poll);else checkUpd()}
 async function checkUpd(){toast('Проверка…');const r=await api('/api/update/check');toast(r.version?'Доступна версия '+r.version:'Установлена последняя версия');poll()}

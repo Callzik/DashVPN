@@ -85,6 +85,32 @@ func (a *API) handler() http.Handler {
 		a.core.Restart()
 		writeJSON(w, true)
 	})
+	api("/api/sites", func(w http.ResponseWriter, r *http.Request) {
+		var list []map[string]string
+		for _, s := range a.prefs.Get().DirectSites {
+			list = append(list, map[string]string{"site": s, "label": SiteLabel(s)})
+		}
+		writeJSON(w, map[string]any{"sites": list})
+	})
+	api("/api/sites/set", func(w http.ResponseWriter, r *http.Request) {
+		var parts []string
+		if arr, ok := body(r)["list"].([]any); ok {
+			for _, v := range arr {
+				parts = append(parts, str(v))
+			}
+		}
+		list := ParseSites(strings.Join(parts, "\n"))
+		a.prefs.Update(func(d *PrefsData) { d.DirectSites = list })
+		a.core.Restart()
+		writeJSON(w, true)
+	})
+	api("/api/sites/parse", func(w http.ResponseWriter, r *http.Request) {
+		var list []map[string]string
+		for _, s := range ParseSites(str(body(r)["text"])) {
+			list = append(list, map[string]string{"site": s, "label": SiteLabel(s)})
+		}
+		writeJSON(w, map[string]any{"sites": list})
+	})
 	api("/api/toggle", func(w http.ResponseWriter, r *http.Request) { a.core.Toggle(); writeJSON(w, true) })
 	api("/api/servers", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"servers": a.core.Servers(), "pinned": a.prefs.Get().Pinned})

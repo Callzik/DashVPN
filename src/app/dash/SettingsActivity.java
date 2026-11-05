@@ -24,7 +24,10 @@ public class SettingsActivity extends Activity {
     private Prefs prefs;
     private TextView modeWl, modeNet, modeHint, logView;
     private EditText subInput;
-    private LinearLayout subList;
+    private LinearLayout subList, siteList;
+    private EditText siteInput;
+    private List<String> sites;
+    private boolean sitesChanged;
     private TextView updStatus, updBtn;
     private final android.os.Handler updHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable updTicker = new Runnable() {
@@ -35,13 +38,13 @@ public class SettingsActivity extends Activity {
     };
 
     private static final int ROOT = -1, P_SUBS = 0, P_AUTO = 1, P_ROUTE = 2, P_APPS = 3, P_SHARE = 4,
-            P_HOME = 5, P_SERVERS = 6, P_UPDATE = 7, P_LOG = 8, P_ISLAND = 9, P_LOCK = 10;
+            P_HOME = 5, P_SERVERS = 6, P_UPDATE = 7, P_LOG = 8, P_ISLAND = 9, P_LOCK = 10, P_SITES = 11;
     private static final String[] TITLES = {"Подписки", "Автовыбор серверов", "Маршрутизация",
-            "Приложения без VPN", "Раздача VPN", "Главный экран", "Серверы из подписки", "Обновление", "Журнал", "Остров и Now Bar", "Только через VPN"};
+            "Приложения без VPN", "Раздача VPN", "Главный экран", "Серверы из подписки", "Обновление", "Журнал", "Остров и Now Bar", "Только через VPN", "Сайты без VPN"};
     private static final int[] ICONS = {IconView.SUBS, IconView.AUTO, IconView.ROUTE, IconView.APPS,
-            IconView.SHARE, IconView.HOME, IconView.SERVERS, IconView.UPDATE, IconView.LOG, IconView.ISLAND, IconView.LOCK};
+            IconView.SHARE, IconView.HOME, IconView.SERVERS, IconView.UPDATE, IconView.LOG, IconView.ISLAND, IconView.LOCK, IconView.GLOBE};
     private static final int[] COLORS = {Ui.ACCENT, 0xFFF2B544, 0xFF5AA9FF, 0xFFFF9F6B,
-            0xFF4FD1C5, 0xFFF27BB0, 0xFFB48CFF, 0xFF6BD68A, 0xFFF0716B, 0xFF5AA9FF, 0xFFF0716B};
+            0xFF4FD1C5, 0xFFF27BB0, 0xFFB48CFF, 0xFF6BD68A, 0xFFF0716B, 0xFF5AA9FF, 0xFFF0716B, 0xFF6FC3FF};
     /** Extra words the search finds a page by: what is inside it, not only its title. */
     private static final String[] KEYS = {
             "ссылка подписка ключ vless добавить удалить вставить обновить переподключить",
@@ -54,8 +57,9 @@ public class SettingsActivity extends Activity {
             "версия обновить установить загрузка apk",
             "лог журнал ошибки диагностика скопировать поддержка",
             "уведомление остров живые уведомления live update строка состояния samsung самсунг",
-            "замок kill switch блокировать запретить закрыть приложения без vpn бан аккаунт утечка"};
-    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_LOCK, P_SHARE}, {P_HOME, P_ISLAND}, {P_UPDATE, P_LOG}};
+            "замок kill switch блокировать запретить закрыть приложения без vpn бан аккаунт утечка",
+            "сайты домены адреса исключения напрямую мимо vpn ссылка youtube ip"};
+    private static final int[][] GROUPS = {{P_AUTO, P_ROUTE, P_APPS, P_SITES, P_LOCK, P_SHARE}, {P_HOME, P_ISLAND}, {P_UPDATE, P_LOG}};
     private static final String[] GROUP_NAMES = {"Подключение", "Внешний вид", "О приложении"};
 
     private ScrollView scroll;
@@ -80,6 +84,7 @@ public class SettingsActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
+        if (page == P_SITES) applySites();
         if (page != ROOT) {
             showRoot();
             enter(-1);
@@ -174,6 +179,7 @@ public class SettingsActivity extends Activity {
             case P_UPDATE: pageUpdate(c, col); renderUpdate(); break;
             case P_LOG: pageLog(c, col); break;
             case P_ISLAND: pageIsland(c, col); break;
+            case P_SITES: pageSites(c, col); break;
         }
         scroll.scrollTo(0, 0);
         enter(1);
@@ -213,6 +219,10 @@ public class SettingsActivity extends Activity {
             case P_APPS: {
                 int n = prefs.excludedApps().size();
                 return n == 0 ? "Все приложения через VPN" : "Напрямую: " + n;
+            }
+            case P_SITES: {
+                int n = prefs.directSites().size();
+                return n == 0 ? "Все сайты через VPN" : "Напрямую: " + n;
             }
             case P_LOCK: {
                 int n = prefs.lockedApps().size();
@@ -467,6 +477,131 @@ public class SettingsActivity extends Activity {
         col.addView(rt, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
     }
 
+    private void pageSites(Context c, LinearLayout col) {
+        sites = prefs.directSites();
+        sitesChanged = false;
+        LinearLayout add = Ui.card(c);
+        siteInput = new EditText(c);
+        siteInput.setTextColor(Ui.FG);
+        siteInput.setHintTextColor(0xFF8E8AA3);
+        siteInput.setHint("youtube.com или ссылка");
+        siteInput.setTypeface(Typeface.MONOSPACE);
+        siteInput.setTextSize(14);
+        siteInput.setSingleLine(true);
+        siteInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        siteInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        siteInput.setBackground(Ui.round(c, Ui.SURFACE2, 12, 0));
+        siteInput.setPadding(Ui.dp(c, 12), Ui.dp(c, 12), Ui.dp(c, 12), Ui.dp(c, 12));
+        siteInput.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override public boolean onEditorAction(TextView v, int a, android.view.KeyEvent e) {
+                addSites(siteInput.getText().toString());
+                return true;
+            }
+        });
+        add.addView(siteInput);
+        LinearLayout btns = Ui.row(c);
+        TextView paste = Ui.button(c, "Вставить", false);
+        paste.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                ClipboardManager cb = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                ClipData d = cb.getPrimaryClip();
+                CharSequence t = d != null && d.getItemCount() > 0 ? d.getItemAt(0).coerceToText(SettingsActivity.this) : null;
+                if (t != null) addSites(t.toString());
+                else Toast.makeText(SettingsActivity.this, "Буфер обмена пуст", Toast.LENGTH_SHORT).show();
+            }
+        });
+        btns.addView(paste, Ui.weight());
+        btns.addView(new View(c), new LinearLayout.LayoutParams(Ui.dp(c, 8), 1));
+        TextView plus = Ui.button(c, "Добавить", false);
+        plus.setTextColor(Ui.ACCENT);
+        plus.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { addSites(siteInput.getText().toString()); }
+        });
+        btns.addView(plus, Ui.weight());
+        add.addView(btns, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 10));
+        col.addView(add, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+
+        LinearLayout list = Ui.card(c);
+        siteList = new LinearLayout(c);
+        siteList.setOrientation(LinearLayout.VERTICAL);
+        list.addView(siteList);
+        col.addView(list, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 12));
+        renderSites();
+    }
+
+    /** Adds every site found in the text (a link, a domain, or a pasted list). */
+    private void addSites(String text) {
+        List<String> found = Sites.parse(text);
+        if (found.isEmpty()) {
+            if (!text.trim().isEmpty()) Toast.makeText(this, "Это не похоже на адрес сайта", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int added = 0;
+        for (String s : found) {
+            if (sites.contains(s)) continue;
+            sites.add(0, s);
+            added++;
+        }
+        siteInput.setText("");
+        if (added == 0) {
+            Toast.makeText(this, "Уже в списке", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        prefs.directSites(sites);
+        sitesChanged = true;
+        renderSites();
+    }
+
+    private void renderSites() {
+        Context c = this;
+        siteList.removeAllViews();
+        if (sites.isEmpty()) {
+            TextView none = Ui.text(c, "Пока пусто", 14, Ui.MUTED, false);
+            none.setGravity(android.view.Gravity.CENTER);
+            none.setPadding(0, Ui.dp(c, 10), 0, Ui.dp(c, 10));
+            siteList.addView(none, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            return;
+        }
+        for (int i = 0; i < sites.size(); i++) {
+            final String s = sites.get(i);
+            if (i > 0) siteList.addView(Ui.divider(c));
+            LinearLayout row = Ui.row(c);
+            row.setMinimumHeight(Ui.dp(c, 44));
+            TextView name = Ui.text(c, Sites.label(s), 15, Ui.FG, true);
+            name.setSingleLine(true);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            row.addView(name, Ui.weight());
+            android.widget.FrameLayout del = new android.widget.FrameLayout(c);
+            del.setContentDescription("Убрать " + Sites.label(s));
+            del.addView(new IconView(c, IconView.CLEAR, Ui.MUTED), new android.widget.FrameLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18), android.view.Gravity.CENTER));
+            del.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    sites.remove(s);
+                    prefs.directSites(sites);
+                    sitesChanged = true;
+                    renderSites();
+                }
+            });
+            row.addView(del, new LinearLayout.LayoutParams(Ui.dp(c, 40), Ui.dp(c, 40)));
+            siteList.addView(row);
+        }
+    }
+
+    /** Leaving the sites page: a running VPN restarts once with the new list. */
+    private void applySites() {
+        if (!sitesChanged) return;
+        sitesChanged = false;
+        if (AppState.vpn == AppState.OFF) return;
+        startService(new Intent(this, BoxVpnService.class).setAction(BoxVpnService.ACTION_STOP));
+        final Context app = getApplicationContext();
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override public void run() {
+                app.startForegroundService(new Intent(app, BoxVpnService.class).setAction(BoxVpnService.ACTION_START));
+            }
+        }, 3000);
+        Toast.makeText(this, "Переподключение…", Toast.LENGTH_SHORT).show();
+    }
+
     private void pageShare(Context c, LinearLayout col) {
         LinearLayout sh = Ui.card(c);
         sh.addView(switchRow(c, "VPN для точки доступа", null, prefs.shareProxy(), new Toggle() {
@@ -577,6 +712,7 @@ public class SettingsActivity extends Activity {
 
     @Override protected void onPause() {
         updHandler.removeCallbacks(updTicker);
+        applySites(); // left the app from the sites page
         super.onPause();
     }
 

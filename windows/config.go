@@ -32,6 +32,8 @@ type BuildOptions struct {
 	TunAddr6     string
 	// processes that must bypass the tunnel (our app and the bundled Xray)
 	BypassProcs []string
+	// sites the user sends around the VPN (normalized by NormalizeSite)
+	DirectSites []string
 }
 
 // BuildSingBox makes the sing-box config: TUN for all traffic, selector "proxy" over two urltest groups.
@@ -88,7 +90,13 @@ func BuildSingBox(servers []*Server, opt BuildOptions) (string, error) {
 		rs("geoip-ru", "geoip-ru.srs"))
 	ruSuffix := arr("ru", "su", "xn--p1ai")
 
-	dnsRules := []any{obj{"rule_set": arr("ru-inside"), "server": "dns-direct"}}
+	myDomains, myIPs := siteRules(opt.DirectSites)
+	var dnsRules []any
+	// the user's own list wins over every other rule; resolved locally so the site gets its nearest address
+	if len(myDomains) > 0 {
+		dnsRules = append(dnsRules, obj{"domain_suffix": myDomains, "server": "dns-direct"})
+	}
+	dnsRules = append(dnsRules, obj{"rule_set": arr("ru-inside"), "server": "dns-direct"})
 	if opt.BlockedVPN {
 		dnsRules = append(dnsRules, obj{"rule_set": arr("ru-blocked"), "server": "dns-remote"})
 	}
@@ -130,9 +138,14 @@ func BuildSingBox(servers []*Server, opt BuildOptions) (string, error) {
 		}
 		rules = append(rules, obj{"process_name": procs, "outbound": "direct"})
 	}
-	rules = append(rules,
-		obj{"ip_is_private": true, "outbound": "direct"},
-		obj{"rule_set": arr("ru-inside"), "outbound": "direct"})
+	rules = append(rules, obj{"ip_is_private": true, "outbound": "direct"})
+	if len(myDomains) > 0 {
+		rules = append(rules, obj{"domain_suffix": myDomains, "outbound": "direct"})
+	}
+	if len(myIPs) > 0 {
+		rules = append(rules, obj{"ip_cidr": myIPs, "outbound": "direct"})
+	}
+	rules = append(rules, obj{"rule_set": arr("ru-inside"), "outbound": "direct"})
 	if opt.BlockedVPN {
 		rules = append(rules, obj{"rule_set": arr("ru-blocked", "ru-blocked-ip"), "outbound": Selector})
 	}

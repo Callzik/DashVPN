@@ -78,6 +78,9 @@ var changelog = map[string][]string{
 	"1.10.4": {
 		"Скорость без замеров: скорость на главном экране больше не учитывает проверку скорости серверов",
 	},
+	"1.11.0": {
+		"Сайты без VPN: Настройки → Сайты без VPN. Впишите или вставьте адрес — сайт и все его поддомены пойдут напрямую",
+	},
 }
 
 // whatsNew lists the entries newer than seen up to the running version, oldest first.

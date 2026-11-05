@@ -20,21 +20,22 @@ type Prefs struct {
 }
 
 type PrefsData struct {
-	Subs       []string          `json:"subs"`
-	Names      map[string]string `json:"names"`
-	Infos      map[string]string `json:"sub_info"`     // subscription-userinfo header per subscription
-	Reminded   map[string]string `json:"sub_reminded"` // "expire:days" of the last end-of-subscription reminder
-	Pinned     string            `json:"pinned"`
-	Off        []string          `json:"off"`
-	Roles      map[string]string `json:"roles"` // server name -> regular | lte | both, set by the user
-	RuDirect   bool              `json:"ru_direct"`
-	BlockedVPN bool              `json:"blocked_vpn"`
-	SubUpdated int64             `json:"sub_updated"`
-	HWID       string            `json:"hwid"`
-	TunAddr    int               `json:"tun_addr"`
-	AutoStart  bool              `json:"connect_on_start"`
-	BypassApps []string          `json:"bypass_apps"`
-	SeenVer    string            `json:"seen_version"` // last version whose what's new was shown
+	Subs        []string          `json:"subs"`
+	Names       map[string]string `json:"names"`
+	Infos       map[string]string `json:"sub_info"`     // subscription-userinfo header per subscription
+	Reminded    map[string]string `json:"sub_reminded"` // "expire:days" of the last end-of-subscription reminder
+	Pinned      string            `json:"pinned"`
+	Off         []string          `json:"off"`
+	Roles       map[string]string `json:"roles"` // server name -> regular | lte | both, set by the user
+	RuDirect    bool              `json:"ru_direct"`
+	BlockedVPN  bool              `json:"blocked_vpn"`
+	SubUpdated  int64             `json:"sub_updated"`
+	HWID        string            `json:"hwid"`
+	TunAddr     int               `json:"tun_addr"`
+	AutoStart   bool              `json:"connect_on_start"`
+	BypassApps  []string          `json:"bypass_apps"`
+	DirectSites []string          `json:"direct_sites"` // sites that go around the VPN
+	SeenVer     string            `json:"seen_version"` // last version whose what's new was shown
 }
 
 func LoadPrefs(dir string) *Prefs {

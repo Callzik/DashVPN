@@ -619,6 +619,8 @@ public class BoxVpnService extends VpnService {
         ConfigBuilder.Options opt = new ConfigBuilder.Options();
         opt.ruDirect = prefs.ruDirect();
         opt.blockedViaVpn = prefs.blockedVpn();
+        opt.directSites = prefs.directSites();
+        if (!opt.directSites.isEmpty()) AppState.log("Сайты без VPN: " + opt.directSites.size());
         opt.ruleDir = rulesDir.getAbsolutePath();
         opt.secret = secret;
         opt.initialGroup = group;

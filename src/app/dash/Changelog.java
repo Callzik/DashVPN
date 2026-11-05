@@ -138,6 +138,9 @@ public final class Changelog {
                 "Замок не слетает: нажатие «Пауза» в старом уведомлении больше не снимает «Только через VPN»",
                 "Плитки точнее: при перетаскивании и растягивании плитка встаёт в ту строку, над которой палец",
         });
+        ENTRIES.put(64, new String[]{
+                "Сайты без VPN: Настройки → Сайты без VPN. Впишите или вставьте адрес — сайт и все его поддомены пойдут напрямую",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
