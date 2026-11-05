@@ -11,7 +11,7 @@ import android.view.View;
 final class IconView extends View {
     static final int SUBS = 0, AUTO = 1, ROUTE = 2, SHARE = 3, APPS = 4, HOME = 5, SERVERS = 6,
             UPDATE = 7, LOG = 8, SEARCH = 9, CHEVRON = 10, BACK = 11, CLEAR = 12, ISLAND = 13,
-            REFRESH = 14, CHECK = 15, LOCK = 16;
+            REFRESH = 14, CHECK = 15, LOCK = 16, GLOBE = 17;
 
     private final int kind;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -117,6 +117,12 @@ final class IconView extends View {
                 cv.drawArc(r, 180, 180, false, p);
                 line(cv, 8, 7, 8, 10.5f); line(cv, 16, 7, 16, 10.5f);
                 fill(cv, 12, 15.75f, 1.4f);
+                break;
+            case GLOBE: // planet with meridian and equator
+                cv.drawCircle(12, 12, 9, p);
+                r.set(8, 3, 16, 21);
+                cv.drawOval(r, p);
+                line(cv, 3, 12, 21, 12);
                 break;
         }
         cv.restore();

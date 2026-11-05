@@ -29,6 +29,8 @@ public final class ConfigBuilder {
         public String sharePass = "";
         /** Adds the speed check proxy (SPEED_PORT). */
         public boolean speedTest = true;
+        /** Sites the user sends around the VPN (normalized by Sites). */
+        public List<String> directSites = new ArrayList<>();
     }
 
     private ConfigBuilder() {}
@@ -78,6 +80,10 @@ public final class ConfigBuilder {
 
         // DNS
         List<Object> dnsRules = new ArrayList<>();
+        List<Object> myDomains = Sites.domains(opt.directSites);
+        List<Object> myIps = Sites.cidrs(opt.directSites);
+        // the user's own list wins over every other rule; resolved locally so the site gets its nearest address
+        if (!myDomains.isEmpty()) dnsRules.add(Json.obj("domain_suffix", myDomains, "server", "dns-direct"));
         dnsRules.add(Json.obj("rule_set", Json.arr("ru-inside"), "server", "dns-direct"));
         if (opt.blockedViaVpn) dnsRules.add(Json.obj("rule_set", Json.arr("ru-blocked"), "server", "dns-remote"));
         if (opt.ruDirect) {
@@ -105,6 +111,8 @@ public final class ConfigBuilder {
             rules.add(Json.obj("inbound", Json.arr("speed-in"), "action", "reject"));
         }
         rules.add(Json.obj("ip_is_private", true, "outbound", "direct"));
+        if (!myDomains.isEmpty()) rules.add(Json.obj("domain_suffix", myDomains, "outbound", "direct"));
+        if (!myIps.isEmpty()) rules.add(Json.obj("ip_cidr", myIps, "outbound", "direct"));
         rules.add(Json.obj("rule_set", Json.arr("ru-inside"), "outbound", "direct"));
         if (opt.blockedViaVpn) rules.add(Json.obj("rule_set", Json.arr("ru-blocked", "ru-blocked-ip"), "outbound", SELECTOR));
         if (opt.ruDirect) {

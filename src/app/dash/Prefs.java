@@ -125,6 +125,14 @@ public final class Prefs {
         return v;
     }
 
+    /** Sites that go around the VPN, normalized by Sites, in the order they were added. */
+    public java.util.List<String> directSites() { return Sites.parse(p.getString("direct_sites", "")); }
+    public void directSites(java.util.List<String> v) {
+        StringBuilder b = new StringBuilder();
+        for (String s : v) b.append(s).append('\n');
+        p.edit().putString("direct_sites", b.toString()).apply();
+    }
+
     /** Apps that go around the VPN (package names). */
     public java.util.Set<String> excludedApps() {
         return new java.util.HashSet<>(p.getStringSet("excluded_apps", new java.util.HashSet<String>()));
