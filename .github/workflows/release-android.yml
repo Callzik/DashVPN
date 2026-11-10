@@ -1,5 +1,5 @@
 # Builds the release-signed APK and publishes it, all in Actions (Actions -> release-android -> Run workflow).
-# Needs the DASH_KS_PASS secret (password of keystore/dash-release.p12).
+# Needs DASH_KEYSTORE_B64 and DASH_KS_PASS for the existing APK signing key.
 # Creates the release android-v<ver> from build.sh's --version-name and writes url + sha256 into version.json on main.
 name: release-android
 
@@ -64,11 +64,18 @@ jobs:
           echo "CORES_DIR=$PWD/out" >> "$GITHUB_ENV"
       - name: Build signed APK
         env:
+          DASH_KEYSTORE_B64: ${{ secrets.DASH_KEYSTORE_B64 }}
           DASH_KS_PASS: ${{ secrets.DASH_KS_PASS }}
+          DASH_KS_ALIAS: ${{ secrets.DASH_KS_ALIAS }}
         run: |
           set -euo pipefail
           [ -n "$DASH_KS_PASS" ] || { echo "::error::secret DASH_KS_PASS is not set"; exit 1; }
-          export DASH_KS=$PWD/keystore/dash-release.p12 DASH_KS_ALIAS=dash
+          [ -n "$DASH_KEYSTORE_B64" ] || { echo "::error::secret DASH_KEYSTORE_B64 is not set"; exit 1; }
+          umask 077
+          export DASH_KS="$RUNNER_TEMP/dash-release.p12" DASH_KS_ALIAS="${DASH_KS_ALIAS:-dash}"
+          trap 'rm -f "$DASH_KS"' EXIT
+          printf '%s' "$DASH_KEYSTORE_B64" | base64 -d > "$DASH_KS"
+          unset DASH_KEYSTORE_B64
           ./build.sh
           mkdir -p dist
           mv build/Dash.apk "dist/Dash-$VER.apk"

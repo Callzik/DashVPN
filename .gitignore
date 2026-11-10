@@ -6,3 +6,4 @@ windows/Dash.exe
 windows/*.syso
 tools/
 dist/
+/keystore/dash-release.p12

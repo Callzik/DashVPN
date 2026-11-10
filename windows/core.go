@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -316,6 +317,9 @@ func (c *Core) fetch(u string) (string, string, string, error) {
 	if err != nil {
 		return "", "", "", err
 	}
+	if err := c.checkSubScheme(req.URL.Scheme); err != nil {
+		return "", "", "", err
+	}
 	req.Header.Set("User-Agent", "v2rayNG/1.10.19")
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("x-hwid", c.hwid())
@@ -323,8 +327,19 @@ func (c *Core) fetch(u string) (string, string, string, error) {
 	req.Header.Set("x-ver-os", osVersion())
 	req.Header.Set("x-device-model", deviceModel())
 	req.Header.Set("x-app-version", "Dash-Windows/"+Version)
-	resp, err := httpDirect.Do(req)
+	client := *httpDirect
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		if len(via) > 5 {
+			return errors.New("слишком много перенаправлений подписки")
+		}
+		return c.checkSubScheme(next.URL.Scheme)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
+		var requestErr *url.Error
+		if errors.As(err, &requestErr) {
+			err = requestErr.Err
+		}
 		return "", "", "", err
 	}
 	defer resp.Body.Close()
@@ -339,6 +354,13 @@ func (c *Core) fetch(u string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("пустой ответ")
 	}
 	return string(b), profileTitle(resp.Header.Get("profile-title")), resp.Header.Get("subscription-userinfo"), nil
+}
+
+func (c *Core) checkSubScheme(scheme string) error {
+	if scheme == "https" || (scheme == "http" && c.prefs.Get().AllowHTTPSubs) {
+		return nil
+	}
+	return errors.New("для подписки нужен HTTPS. HTTP можно разрешить в настройках подписок")
 }
 
 func profileTitle(h string) string {

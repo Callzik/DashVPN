@@ -381,6 +381,12 @@ public class SettingsActivity extends Activity {
         subList.setOrientation(LinearLayout.VERTICAL);
         sub.addView(subList);
         renderSubs();
+        sub.addView(Ui.text(c, "При обновлении провайдер подписки получает идентификатор устройства, модель и версию ОС.",
+                13, Ui.MUTED, false));
+        sub.addView(switchRow(c, "Разрешить подписки по HTTP", "Ссылка и данные устройства передаются без шифрования",
+                prefs.allowHttpSubs(), new Toggle() {
+                    @Override public void set(boolean v) { prefs.allowHttpSubs(v); }
+                }));
 
         subInput = new EditText(c);
         subInput.setTextColor(Ui.FG);
@@ -415,6 +421,10 @@ public class SettingsActivity extends Activity {
                 String val = subInput.getText().toString().trim();
                 if (!MainActivity.looksLikeLink(val)) {
                     Toast.makeText(SettingsActivity.this, "Это не похоже на ссылку на подписку", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                if (Subs.isCleartext(val) && !prefs.allowHttpSubs()) {
+                    Toast.makeText(SettingsActivity.this, "Используйте HTTPS или разрешите HTTP выше", Toast.LENGTH_LONG).show();
                     return;
                 }
                 if (!prefs.addSub(val)) {

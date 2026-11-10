@@ -72,14 +72,9 @@ jobs:
           KS_ALIAS: ${{ secrets.DASH_KS_ALIAS }}
         run: |
           KS=$RUNNER_TEMP/dash.keystore
-          if [ -n "$KEYSTORE_B64" ]; then
+          umask 077
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KS_PASS" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$KS"
-            echo "DASH_KS_PASS=$KS_PASS" >> "$GITHUB_ENV"
-            echo "DASH_KS_ALIAS=${KS_ALIAS:-dash}" >> "$GITHUB_ENV"
-            echo "APK_SUFFIX=" >> "$GITHUB_ENV"
-          elif [ -n "$KS_PASS" ]; then
-            # release key kept in the repo (keystore/dash-release.p12), opened with the DASH_KS_PASS secret
-            cp keystore/dash-release.p12 "$KS"
             echo "DASH_KS_PASS=$KS_PASS" >> "$GITHUB_ENV"
             echo "DASH_KS_ALIAS=${KS_ALIAS:-dash}" >> "$GITHUB_ENV"
             echo "APK_SUFFIX=" >> "$GITHUB_ENV"

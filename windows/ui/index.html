@@ -240,6 +240,8 @@ pre.log{font-family:Consolas,monospace;font-size:12px;color:var(--muted);white-s
           <button class="secondary grow" style="color:var(--accent)" onclick="addSub('subinput')">Добавить</button>
         </div>
         <div class="m" id="subinfo" style="margin-top:12px"></div>
+        <div class="m" style="margin-top:12px">При обновлении провайдер подписки получает идентификатор устройства, модель и версию ОС.</div>
+        <div class="row" style="margin-top:12px"><div class="grow"><div class="b">Разрешить подписки по HTTP</div><div class="m">Ссылка и данные устройства передаются без шифрования</div></div><div class="switch" id="sw-http" onclick="setOpt('allowHttpSubs',this)"></div></div>
       </div>
       <button class="secondary" style="width:100%;margin-top:12px" onclick="refreshSubs()">Обновить</button>
     </div>
@@ -460,6 +462,7 @@ async function loadSettings(){
   const upd=r.updated?new Date(r.updated*1000):null;
   $('subinfo').textContent=(upd?'Обновлены '+upd.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'Ещё не загружались');
   $('subinfo').style.whiteSpace='pre-line';
+  $('sw-http').classList.toggle('on',!!r.allowHttpSubs);
   $('sw-ru').classList.toggle('on',!!r.ruDirect);$('sw-bl').classList.toggle('on',!!r.blockedVpn);
   $('sw-as').classList.toggle('on',!!r.autoStart);$('sw-ar').classList.toggle('on',!!r.autorun);
   const ap=await api('/api/apps'),si=await api('/api/sites');
@@ -545,7 +548,10 @@ async function refreshSubs(){await api('/api/refresh');toast(S.state!=='off'?'П
 function toggleLog(){const l=$('log'),on=l.style.display==='none';l.style.display=on?'':'none';$('logbtn').textContent=on?'Скрыть':'Показать';if(on)l.scrollTop=0}
 async function addSub(id,onb){
   const v=$(id).value.trim();
-  const r=await api('/api/subs/add',{url:v});
+  let r=await api('/api/subs/add',{url:v});
+  if(r.needsHttpConsent && confirm('Разрешить подписки по HTTP? Ссылка и данные устройства будут передаваться без шифрования.')){
+    r=await api('/api/subs/add',{url:v,allowHttp:true});
+  }
   if(!r.ok){if(onb)$('onberr').textContent=r.error;else toast(r.error);return}
   $(id).value='';
   if(onb){show('main')}else{toast(S.state!=='off'?'Добавлено, переподключение':'Добавлено');loadSettings()}
