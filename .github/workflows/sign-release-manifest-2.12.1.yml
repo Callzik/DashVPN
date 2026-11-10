@@ -1,0 +1,39 @@
+name: sign-release-manifest-2.12.1
+
+on:
+  push:
+    branches: [codex/sign-release-manifest-2.12.1]
+    paths: [.github/workflows/sign-release-manifest-2.12.1.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24.7'
+          cache: false
+      - name: Sign metadata for the published releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DASH_KS_PASS: ${{ secrets.DASH_KS_PASS }}
+        run: |
+          set -euo pipefail
+          a=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/android-v2.12.1" | jq -ce 'select(.draft == false and .prerelease == false) | .assets[] | select(.name == "Dash-2.12.1.apk")')
+          w=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/windows-v1.11.1" | jq -ce 'select(.draft == false and .prerelease == false) | .assets[] | select(.name == "Dash-Windows-1.11.1.zip")')
+          jq --argjson a "$a" --argjson w "$w" '
+            def sha: .digest | select(test("^sha256:[0-9a-f]{64}$")) | ltrimstr("sha256:");
+            .android += {version: "2.12.1", code: 65, url: $a.browser_download_url, sha256: ($a | sha)}
+            | .windows += {version: "1.11.1", url: $w.browser_download_url, sha256: ($w | sha)}
+          ' version.json > "$RUNNER_TEMP/version.json"
+          jq -e '.android.version == "2.12.1" and .windows.version == "1.11.1"' "$RUNNER_TEMP/version.json" > /dev/null
+          mv "$RUNNER_TEMP/version.json" version.json
+          rm -f version.json.sig
+          scripts/sign-version.sh .
+          test -s version.json.sig
+          printf 'SIGNED_MANIFEST_B64=%s\n' "$(base64 -w0 version.json)"
+          printf 'MANIFEST_SIGNATURE_B64=%s\n' "$(base64 -w0 version.json.sig)"
