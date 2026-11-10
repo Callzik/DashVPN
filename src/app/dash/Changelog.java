@@ -141,6 +141,10 @@ public final class Changelog {
         ENTRIES.put(64, new String[]{
                 "Сайты без VPN: Настройки → Сайты без VPN. Впишите или вставьте адрес — сайт и все его поддомены пойдут напрямую",
         });
+        ENTRIES.put(65, new String[]{
+                "Подписки загружаются по HTTPS. Для HTTP нужно включить разрешение в настройках подписок.",
+                "В настройках подписок указано, какие данные устройства получает провайдер.",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */
