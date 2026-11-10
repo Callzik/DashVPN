@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -58,6 +59,10 @@ func TestLoadSubsKeepsInfo(t *testing.T) {
 	p := LoadPrefs(dir)
 	p.AddSub(srv.URL)
 	c := NewCore(p, dir, dir, dir, &Log{})
+	if _, _, _, err := c.fetch(srv.URL); err == nil || !strings.Contains(err.Error(), "HTTPS") {
+		t.Fatalf("HTTP subscription should require consent, got %v", err)
+	}
+	p.Update(func(d *PrefsData) { d.AllowHTTPSubs = true })
 	if got := c.loadSubs([]string{srv.URL}); len(got) != 1 {
 		t.Fatalf("subs: %v", got)
 	}
