@@ -15,6 +15,11 @@ public final class Prefs {
 
     /* ---------- subscriptions (several links) ---------- */
 
+    public boolean allowHttpSubs() { return p.getBoolean("allow_http_subs", false); }
+    public void allowHttpSubs(boolean allow) {
+        p.edit().putBoolean("allow_http_subs", allow).remove("sub_updated").apply();
+    }
+
     /** All subscription links / keys, in the order they were added. */
     public synchronized java.util.List<String> subUrls() {
         java.util.List<String> out = new java.util.ArrayList<>();

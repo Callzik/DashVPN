@@ -500,10 +500,6 @@ public class BoxVpnService extends VpnService {
         return out;
     }
 
-    private static boolean isHttp(String url) {
-        return url.startsWith("http://") || url.startsWith("https://");
-    }
-
     /**
      * Downloads all subscriptions at once. A link that fails (or answers with a stub while a good copy is saved)
      * falls back to its saved copy, so one broken subscription never breaks the others.
@@ -2044,28 +2040,43 @@ public class BoxVpnService extends VpnService {
     }
 
     private String fetch(String url, String[] title) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        try {
-            c.setConnectTimeout(10000);
-            c.setReadTimeout(15000);
-            c.setRequestProperty("User-Agent", "v2rayNG/1.10.19");
-            c.setRequestProperty("Accept", "*/*");
-            // Device identification expected by panels with a device limit (Remnawave, Marzban forks, etc.)
-            c.setRequestProperty("x-hwid", hwid());
-            c.setRequestProperty("x-device-os", "Android");
-            c.setRequestProperty("x-ver-os", Build.VERSION.RELEASE);
-            c.setRequestProperty("x-device-model", (Build.MANUFACTURER + " " + Build.MODEL).trim());
-            c.setRequestProperty("x-app-version", "Dash/1.7");
-            int code = c.getResponseCode();
-            if (code != 200) throw new Exception("HTTP " + code);
-            String body = Clash.read(c.getInputStream());
-            if (body.trim().isEmpty()) throw new Exception("пустой ответ");
-            title[0] = profileTitle(c.getHeaderField("profile-title"));
-            if (title.length > 1) title[1] = c.getHeaderField("subscription-userinfo");
-            return body;
-        } finally {
-            c.disconnect();
+        URL target = new URL(url);
+        for (int redirects = 0; redirects <= 5; redirects++) {
+            String protocol = target.getProtocol();
+            if (!"https".equals(protocol) && !("http".equals(protocol) && prefs.allowHttpSubs())) {
+                throw new java.io.IOException("Для подписки нужен HTTPS. HTTP можно разрешить в настройках подписок");
+            }
+            HttpURLConnection c = (HttpURLConnection) target.openConnection();
+            c.setInstanceFollowRedirects(false);
+            try {
+                c.setConnectTimeout(10000);
+                c.setReadTimeout(15000);
+                c.setRequestProperty("User-Agent", "v2rayNG/1.10.19");
+                c.setRequestProperty("Accept", "*/*");
+                // Device identification expected by panels with a device limit (Remnawave, Marzban forks, etc.)
+                c.setRequestProperty("x-hwid", hwid());
+                c.setRequestProperty("x-device-os", "Android");
+                c.setRequestProperty("x-ver-os", Build.VERSION.RELEASE);
+                c.setRequestProperty("x-device-model", (Build.MANUFACTURER + " " + Build.MODEL).trim());
+                c.setRequestProperty("x-app-version", "Dash/1.7");
+                int code = c.getResponseCode();
+                if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                    String location = c.getHeaderField("Location");
+                    if (location == null || location.isEmpty()) throw new java.io.IOException("Нет адреса перенаправления");
+                    target = new URL(target, location);
+                    continue;
+                }
+                if (code != 200) throw new Exception("HTTP " + code);
+                String body = Clash.read(c.getInputStream());
+                if (body.trim().isEmpty()) throw new Exception("пустой ответ");
+                title[0] = profileTitle(c.getHeaderField("profile-title"));
+                if (title.length > 1) title[1] = c.getHeaderField("subscription-userinfo");
+                return body;
+            } finally {
+                c.disconnect();
+            }
         }
+        throw new java.io.IOException("Слишком много перенаправлений подписки");
     }
 
     /** profile-title header: plain text or "base64:…". */

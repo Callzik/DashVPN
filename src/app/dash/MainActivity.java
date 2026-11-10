@@ -798,6 +798,23 @@ public class MainActivity extends Activity {
             subError.setVisibility(View.VISIBLE);
             return;
         }
+        if (Subs.isCleartext(v) && !prefs.allowHttpSubs()) {
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Разрешить подписки по HTTP?")
+                    .setMessage("Ссылка и данные устройства будут передаваться без шифрования. Используйте HTTPS, если он доступен.")
+                    .setNegativeButton("Отмена", null)
+                    .setPositiveButton("Разрешить HTTP", new android.content.DialogInterface.OnClickListener() {
+                        @Override public void onClick(android.content.DialogInterface dialog, int which) {
+                            prefs.allowHttpSubs(true);
+                            finishSubscription(v);
+                        }
+                    }).show();
+            return;
+        }
+        finishSubscription(v);
+    }
+
+    private void finishSubscription(String v) {
         subError.setVisibility(View.GONE);
         prefs.addSub(v);
         showScreen();

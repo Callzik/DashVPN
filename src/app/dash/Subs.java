@@ -15,7 +15,11 @@ public final class Subs {
     private Subs() {}
 
     public static boolean isHttp(String url) {
-        return url.startsWith("http://") || url.startsWith("https://");
+        return isCleartext(url) || url.regionMatches(true, 0, "https://", 0, 8);
+    }
+
+    public static boolean isCleartext(String url) {
+        return url.regionMatches(true, 0, "http://", 0, 7);
     }
 
     /** Readable name: the panel's profile-title, else the host, else the key type. */

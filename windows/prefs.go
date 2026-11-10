@@ -21,6 +21,7 @@ type Prefs struct {
 
 type PrefsData struct {
 	Subs        []string          `json:"subs"`
+	AllowHTTPSubs bool           `json:"allow_http_subs"`
 	Names       map[string]string `json:"names"`
 	Infos       map[string]string `json:"sub_info"`     // subscription-userinfo header per subscription
 	Reminded    map[string]string `json:"sub_reminded"` // "expire:days" of the last end-of-subscription reminder
@@ -162,7 +163,11 @@ func (p *Prefs) SetCache(u, body string) {
 func (p *Prefs) MarkUpdated() { p.Update(func(d *PrefsData) { d.SubUpdated = time.Now().Unix() }) }
 
 func isHTTP(u string) bool {
-	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+	return isCleartextSub(u) || (len(u) >= 8 && strings.EqualFold(u[:8], "https://"))
+}
+
+func isCleartextSub(u string) bool {
+	return len(u) >= 7 && strings.EqualFold(u[:7], "http://")
 }
 
 // SubLabel: the panel's profile-title, else the host, else the key type.

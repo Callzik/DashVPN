@@ -139,18 +139,28 @@ func (a *API) handler() http.Handler {
 		for _, u := range d.Subs {
 			list = append(list, map[string]any{"url": u, "name": a.prefs.SubLabel(u), "ring": Ring(d.Infos[u], time.Now())})
 		}
-		writeJSON(w, map[string]any{"subs": list, "updated": d.SubUpdated, "ruDirect": d.RuDirect, "blockedVpn": d.BlockedVPN, "autoStart": d.AutoStart,
+		writeJSON(w, map[string]any{"subs": list, "updated": d.SubUpdated, "allowHttpSubs": d.AllowHTTPSubs, "ruDirect": d.RuDirect, "blockedVpn": d.BlockedVPN, "autoStart": d.AutoStart,
 			"autorun": AutostartEnabled(), "summary": a.core.View().Summary})
 	})
 	api("/api/subs/add", func(w http.ResponseWriter, r *http.Request) {
-		u := strings.TrimSpace(str(body(r)["url"]))
+		b := body(r)
+		u := strings.TrimSpace(str(b["url"]))
 		if !looksLikeLink(u) {
 			writeJSON(w, map[string]any{"ok": false, "error": "Это не похоже на ссылку на подписку"})
+			return
+		}
+		needsConsent := isCleartextSub(u) && !a.prefs.Get().AllowHTTPSubs
+		confirmed, _ := b["allowHttp"].(bool)
+		if needsConsent && !confirmed {
+			writeJSON(w, map[string]any{"ok": false, "needsHttpConsent": true, "error": "Используйте HTTPS или разрешите HTTP"})
 			return
 		}
 		if !a.prefs.AddSub(u) {
 			writeJSON(w, map[string]any{"ok": false, "error": "Эта подписка уже добавлена"})
 			return
+		}
+		if needsConsent {
+			a.prefs.Update(func(d *PrefsData) { d.AllowHTTPSubs = true })
 		}
 		a.core.Restart()
 		writeJSON(w, map[string]any{"ok": true})
@@ -165,6 +175,10 @@ func (a *API) handler() http.Handler {
 		a.prefs.Update(func(d *PrefsData) {
 			if v, ok := b["ruDirect"].(bool); ok {
 				d.RuDirect = v
+			}
+			if v, ok := b["allowHttpSubs"].(bool); ok && d.AllowHTTPSubs != v {
+				d.AllowHTTPSubs = v
+				d.SubUpdated = 0
 			}
 			if v, ok := b["blockedVpn"].(bool); ok {
 				d.BlockedVPN = v
