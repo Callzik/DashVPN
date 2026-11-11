@@ -147,6 +147,7 @@ func main() {
 		msgBox("Не удалось запустить: " + err.Error())
 		return
 	}
+	go serveControl(app.Core, app.Log)
 	done := make(chan struct{})
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		AutoFocus: true,
