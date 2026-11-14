@@ -10,9 +10,16 @@ import java.util.Set;
 public final class Subs {
     public static final class Entry {
         public String url, name, body;
+        /** The download failed and the saved copy is used instead. */
+        public boolean stale;
     }
 
     private Subs() {}
+
+    public static boolean anyStale(List<Entry> entries) {
+        for (Entry e : entries) if (e.stale) return true;
+        return false;
+    }
 
     public static boolean isHttp(String url) {
         return isCleartext(url) || url.regionMatches(true, 0, "https://", 0, 8);

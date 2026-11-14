@@ -151,7 +151,8 @@ public final class SubParser {
         if (type.equals("vless")) {
             o.put("uuid", p.user);
             String flow = p.q("flow");
-            if (!flow.isEmpty()) o.put("flow", flow);
+            // the core knows one flow; "…-udp443" and other variants would stop the whole config from loading
+            if (flow.startsWith("xtls-rprx-vision")) o.put("flow", "xtls-rprx-vision");
             o.put("packet_encoding", "xudp");
         } else {
             o.put("password", p.user);
@@ -444,6 +445,7 @@ public final class SubParser {
                 p.host = hp.substring(0, c);
                 p.port = Integer.parseInt(hp.substring(c + 1));
             }
+            if (p.port < 1 || p.port > 65535) throw new IllegalArgumentException("порт " + p.port);
             for (String kv : query.split("&")) {
                 if (kv.isEmpty()) continue;
                 int eq = kv.indexOf('=');

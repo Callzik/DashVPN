@@ -195,6 +195,7 @@ func urltest(tag string, members []any) obj {
 
 type SubEntry struct {
 	URL, Name, Body string
+	Stale           bool // the download failed and the saved copy is used instead
 }
 
 // MergeSubs parses every subscription, keeps names unique across them and renumbers tags.

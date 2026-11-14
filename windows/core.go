@@ -227,8 +227,7 @@ func (c *Core) boot(g int) error {
 	entries := c.savedSubs(urls)
 	fromCache := entries != nil
 	if fromCache {
-		c.log.Add(fmt.Sprintf("Подписка обновлялась %d мин назад — используется сохранённая копия, обновление в фоне",
-			int(time.Since(time.Unix(c.prefs.Get().SubUpdated, 0)).Minutes())))
+		c.log.Add("Используется сохранённая копия подписки, обновление в фоне")
 	} else {
 		if len(urls) > 1 {
 			c.setPhase(g, fmt.Sprintf("Загрузка подписок (%d)", len(urls)))
@@ -261,7 +260,7 @@ func (c *Core) boot(g int) error {
 		return fmt.Errorf("Нет серверов для подключения: все отключены или не поддерживаются")
 	}
 	if !fromCache {
-		c.prefs.MarkUpdated()
+		c.markSubs(entries)
 	}
 	c.applyServers(merged, warnings)
 	if err := c.startCore(g); err != nil {
@@ -421,7 +420,7 @@ func (c *Core) loadSubs(urls []string) []SubEntry {
 				msg := name + ": не удалось скачать (" + err.Error() + ")"
 				if cache != "" {
 					msg += ", используется сохранённая копия"
-					res[i] = &SubEntry{URL: u, Name: name, Body: cache}
+					res[i] = &SubEntry{URL: u, Name: name, Body: cache, Stale: true}
 				}
 				c.log.Add(msg)
 				return
@@ -448,6 +447,19 @@ func (c *Core) loadSubs(urls []string) []SubEntry {
 		}
 	}
 	return out
+}
+
+const subRetry = 30 * time.Minute
+
+// markSubs: everything downloaded — next refresh in 12 hours; something came from the saved copy — retry in half an hour.
+func (c *Core) markSubs(entries []SubEntry) {
+	for _, e := range entries {
+		if e.Stale {
+			c.prefs.Update(func(d *PrefsData) { d.SubUpdated = time.Now().Add(subRetry - subRefresh).Unix() })
+			return
+		}
+	}
+	c.prefs.MarkUpdated()
 }
 
 func signature(list []*Server) string {
@@ -1327,11 +1339,14 @@ func (c *Core) checkSub(g int) {
 	entries := c.loadSubs(urls)
 	var warnings, stubs []string
 	fresh := c.prefs.Arrange(MergeSubs(entries, &warnings, &stubs))
-	if len(fresh) == 0 || !c.current(g) {
+	if !c.current(g) {
+		return
+	}
+	if len(fresh) == 0 {
 		c.log.Add("Автообновление: подписки не скачались, повтор позже")
 		return
 	}
-	c.prefs.MarkUpdated()
+	c.markSubs(entries)
 	c.mu.Lock()
 	same := signature(fresh) == c.sig
 	c.mu.Unlock()
@@ -1575,7 +1590,7 @@ func (c *Core) Servers() []ServerView {
 			return !a.Off
 		}
 		if a.Group != b.Group {
-			return a.Group == "regular"
+			return groupRank(a.Group) < groupRank(b.Group)
 		}
 		key := func(p int) int {
 			if p > 0 {
@@ -1621,4 +1636,15 @@ func (c *Core) SetOff(name string, off bool) {
 		}
 		d.Off = out
 	})
+}
+
+// groupRank orders the server list: regular, LTE, then servers serving both.
+func groupRank(g string) int {
+	switch g {
+	case "regular":
+		return 0
+	case "lte":
+		return 1
+	}
+	return 2
 }

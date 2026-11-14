@@ -93,6 +93,10 @@ public final class Prefs {
 
     public long subUpdated() { return p.getLong("sub_updated", 0); }
     public void markSubUpdated() { p.edit().putLong("sub_updated", System.currentTimeMillis()).apply(); }
+    /** A download failed: the saved copy serves for retryMs more, then the next check or connect tries again. */
+    public void markSubRetry(long refreshMs, long retryMs) {
+        p.edit().putLong("sub_updated", System.currentTimeMillis() - refreshMs + retryMs).apply();
+    }
     public void resetSubUpdated() { p.edit().remove("sub_updated").apply(); }
 
     public String mode() { return p.getString("mode", MODE_WL); }
