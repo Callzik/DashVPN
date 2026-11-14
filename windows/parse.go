@@ -251,7 +251,7 @@ func partsOf(link string) (*parts, error) {
 		portStr = hp[c+1:]
 	}
 	port, err := strconv.Atoi(portStr)
-	if err != nil {
+	if err != nil || port < 1 || port > 65535 {
 		return nil, fmt.Errorf("порт")
 	}
 	p.port = port
@@ -277,8 +277,9 @@ func parseVlessTrojan(link, typ string, warnings *[]string) (*Server, error) {
 	o := obj{"type": typ, "tag": "", "server": p.host, "server_port": p.port}
 	if typ == "vless" {
 		o["uuid"] = p.user
-		if f := p.q("flow"); f != "" {
-			o["flow"] = f
+		// the core knows one flow; "…-udp443" and other variants would stop the whole config from loading
+		if strings.HasPrefix(p.q("flow"), "xtls-rprx-vision") {
+			o["flow"] = "xtls-rprx-vision"
 		}
 		o["packet_encoding"] = "xudp"
 	} else {

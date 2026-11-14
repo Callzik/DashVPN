@@ -622,5 +622,47 @@
    }
   ],
   "warnings": 0
+ },
+ {
+  "name": "flow variants and bad ports",
+  "sub": "vless://11111111-2222-3333-4444-555555555555@a.example.com:443?security=tls\u0026flow=xtls-rprx-vision-udp443\u0026type=tcp#Udp443\nvless://11111111-2222-3333-4444-555555555555@b.example.com:443?security=tls\u0026flow=xtls-rprx-direct\u0026type=tcp#OldFlow\nvless://11111111-2222-3333-4444-555555555555@c.example.com:0?security=tls\u0026type=tcp#Port0\ntrojan://pw@d.example.com:70000#Port70000",
+  "servers": [
+   {
+    "name": "Udp443",
+    "group": 0,
+    "host": "a.example.com",
+    "outbound": {
+     "flow": "xtls-rprx-vision",
+     "packet_encoding": "xudp",
+     "server": "a.example.com",
+     "server_port": 443,
+     "tag": "srv1",
+     "tls": {
+      "enabled": true,
+      "server_name": "a.example.com"
+     },
+     "type": "vless",
+     "uuid": "11111111-2222-3333-4444-555555555555"
+    }
+   },
+   {
+    "name": "OldFlow",
+    "group": 0,
+    "host": "b.example.com",
+    "outbound": {
+     "packet_encoding": "xudp",
+     "server": "b.example.com",
+     "server_port": 443,
+     "tag": "srv2",
+     "tls": {
+      "enabled": true,
+      "server_name": "b.example.com"
+     },
+     "type": "vless",
+     "uuid": "11111111-2222-3333-4444-555555555555"
+    }
+   }
+  ],
+  "warnings": 2
  }
 ]

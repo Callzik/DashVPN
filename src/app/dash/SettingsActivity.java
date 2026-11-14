@@ -84,7 +84,7 @@ public class SettingsActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (page == P_SITES) applySites();
+        applySites();
         if (page != ROOT) {
             showRoot();
             enter(-1);
@@ -446,6 +446,10 @@ public class SettingsActivity extends Activity {
         save.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 prefs.resetSubUpdated();
+                if (AppState.vpn == AppState.OFF) {
+                    Toast.makeText(SettingsActivity.this, "Обновится при подключении", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 reconnect();
             }
         });
@@ -478,11 +482,11 @@ public class SettingsActivity extends Activity {
     private void pageRouting(Context c, LinearLayout col) {
         LinearLayout rt = Ui.card(c);
         rt.addView(switchRow(c, "Российские сайты без VPN", null, prefs.ruDirect(), new Toggle() {
-            @Override public void set(boolean v) { prefs.ruDirect(v); }
+            @Override public void set(boolean v) { prefs.ruDirect(v); sitesChanged = true; }
         }));
         rt.addView(Ui.divider(c));
         rt.addView(switchRow(c, "Заблокированные в РФ — через VPN", null, prefs.blockedVpn(), new Toggle() {
-            @Override public void set(boolean v) { prefs.blockedVpn(v); }
+            @Override public void set(boolean v) { prefs.blockedVpn(v); sitesChanged = true; }
         }));
         col.addView(rt, Ui.lp(c, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 8));
     }
@@ -597,7 +601,7 @@ public class SettingsActivity extends Activity {
         }
     }
 
-    /** Leaving the sites page: a running VPN restarts once with the new list. */
+    /** Leaving the sites or routing page: a running VPN restarts once with the new rules. */
     private void applySites() {
         if (!sitesChanged) return;
         sitesChanged = false;

@@ -430,8 +430,7 @@ public class BoxVpnService extends VpnService {
         List<Subs.Entry> entries = savedSubs(urls);
         final boolean fromCache = entries != null;
         if (fromCache) {
-            AppState.log("Подписка обновлялась " + (System.currentTimeMillis() - prefs.subUpdated()) / 60000
-                    + " мин назад — используется сохранённая копия, обновление в фоне");
+            AppState.log("Используется сохранённая копия подписки, обновление в фоне");
         } else {
             AppState.phase = urls.size() > 1 ? "Загрузка подписок (" + urls.size() + ")" : "Загрузка подписки";
             AppState.changed();
@@ -449,7 +448,7 @@ public class BoxVpnService extends VpnService {
             if (!stubs.isEmpty()) throw new Exception("Сервис подписки вместо серверов прислал заглушку: " + stubs.get(0));
             throw new Exception("Не удалось скачать подписку. Проверьте ссылку и интернет");
         }
-        if (!fromCache) prefs.markSubUpdated();
+        if (!fromCache) markSubs(entries);
         applyServers(merged, warnings);
         if (!running) return;
 
@@ -545,6 +544,7 @@ public class BoxVpnService extends VpnService {
                                 + (cache.isEmpty() ? "" : ", используется сохранённая копия"));
                         if (!cache.isEmpty()) {
                             e.body = cache;
+                            e.stale = true;
                             out.add(e);
                         }
                     }
@@ -567,6 +567,14 @@ public class BoxVpnService extends VpnService {
         }
         SubReminder.check(this, prefs); // fresh end dates
         return sorted;
+    }
+
+    private static final long SUB_RETRY_MS = 30 * 60 * 1000L;
+
+    /** Everything downloaded: next refresh in 12 hours. Something came from the saved copy: try again in half an hour. */
+    private void markSubs(List<Subs.Entry> entries) {
+        if (Subs.anyStale(entries)) prefs.markSubRetry(SUB_REFRESH_MS, SUB_RETRY_MS);
+        else prefs.markSubUpdated();
     }
 
     private static String signature(List<Server> list) {
@@ -700,6 +708,7 @@ public class BoxVpnService extends VpnService {
                 }
             }
         }, 20, 20, TimeUnit.SECONDS);
+        coreUp = true;
     }
 
     /* ---------- watchdog: notice a dead server in seconds, not at the next 3-minute check ---------- */
@@ -1251,7 +1260,7 @@ public class BoxVpnService extends VpnService {
             AppState.log("Автообновление: подписки не скачались, повтор позже");
             return;
         }
-        prefs.markSubUpdated();
+        markSubs(entries);
         if (signature(fresh).equals(serversSig)) {
             AppState.log("Автообновление: подписки не изменились");
             return;
@@ -1270,8 +1279,13 @@ public class BoxVpnService extends VpnService {
 
     /** Restarts only the core with new servers; the VPN interface and the notification stay. */
     private void restartCore(List<Server> fresh, List<String> warnings) throws Exception {
+        restartCore(fresh, warnings, "Применение обновлённой подписки");
+    }
+
+    private void restartCore(List<Server> fresh, List<String> warnings, String phase) throws Exception {
         if (!setVpn(AppState.CONNECTING)) return;
-        AppState.phase = "Применение обновлённой подписки";
+        coreUp = false;
+        AppState.phase = phase;
         AppState.changed();
         if (periodic != null) periodic.cancel(false);
         if (statusTask != null) statusTask.cancel(false);
@@ -1594,13 +1608,52 @@ public class BoxVpnService extends VpnService {
                 } catch (Exception ignored) {
                 }
                 if (skipped > 0) AppState.log("… ещё " + skipped + " строк отчёта о сбое скрыто");
-                if (running && !stopping && helper == proc) {
-                    AppState.log("Ядро остановилось");
-                    fail("Ядро остановилось, подробности в журнале");
-                }
+                if (running && !stopping && helper == proc) coreDied();
             }
         }, "core-log").start();
         pushIface();
+    }
+
+    /** The core is up and serving: its death from here on is a crash to recover from, not a failed start. */
+    private volatile boolean coreUp;
+    private final java.util.ArrayDeque<Long> crashes = new java.util.ArrayDeque<>();
+    private static final int CRASH_RETRIES = 3;
+    private static final long CRASH_WINDOW_MS = 10 * 60 * 1000L;
+
+    /**
+     * The core process died on its own. A working core is started again on the same VPN interface
+     * (traffic waits, nothing leaks past the VPN); a core that keeps dying or never started stops the VPN.
+     */
+    private void coreDied() {
+        boolean retry;
+        synchronized (crashes) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            while (!crashes.isEmpty() && now - crashes.peekFirst() > CRASH_WINDOW_MS) crashes.pollFirst();
+            retry = coreUp && crashes.size() < CRASH_RETRIES;
+            if (retry) crashes.addLast(now);
+        }
+        if (!retry) {
+            AppState.log("Ядро остановилось");
+            fail("Ядро остановилось, подробности в журнале");
+            return;
+        }
+        coreUp = false;
+        AppState.log("Ядро остановилось — перезапуск");
+        try {
+            exec.execute(new Runnable() {
+                @Override public void run() {
+                    if (!running) return;
+                    try {
+                        restartCore(new ArrayList<Server>(servers), new ArrayList<String>(), "Перезапуск ядра");
+                    } catch (Throwable t) {
+                        AppState.log("Перезапуск ядра: " + t);
+                        fail("Ядро остановилось, подробности в журнале");
+                    }
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException stopped) {
+            // the VPN is being turned off
+        }
     }
 
     /* ---------- bundled Xray for transports sing-box lacks (xhttp) ---------- */
