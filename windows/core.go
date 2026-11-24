@@ -618,6 +618,12 @@ func (c *Core) startCore(g int) error {
 	if lastErr != nil {
 		return lastErr
 	}
+	pinned := c.prefs.Get().Pinned
+	if pinned != "" && c.applyPin(pinned) {
+		c.setState(g, StOn, "")
+		c.refreshStatus()
+		return nil
+	}
 	c.setPhase(g, "Поиск самого быстрого сервера ("+c.groupLabel(group)+")")
 	working := c.ensureWorkingGroup(g, group, true)
 	if working == "" {
@@ -1092,7 +1098,7 @@ func (c *Core) refreshStatus() {
 	} else {
 		c.serverName = tag
 	}
-	if ping > 0 || c.ping <= 0 {
+	if pinned != "" || ping > 0 || c.ping <= 0 {
 		c.ping = ping
 	}
 }
@@ -1197,7 +1203,7 @@ func (c *Core) watch(g int) {
 		return
 	}
 	if pt := c.pinnedTag(); pt != "" {
-		c.watchPinned(g, pt)
+		c.watchPinned(g, cl, pt)
 		return
 	}
 	c.mu.Lock()
@@ -1293,34 +1299,25 @@ func (c *Core) watchAuto(g int, cl *Clash, group, tag string) {
 	c.showBanner("Сервер перестал отвечать — переключено на "+n, 2)
 }
 
-func (c *Core) watchPinned(g int, tag string) {
-	cl := c.cl()
-	if d := cl.Delay(tag, 5000); d > 0 {
-		c.mu.Lock()
-		c.deadCount, c.ping = 0, d
+func (c *Core) watchPinned(g int, cl *Clash, tag string) {
+	d := cl.Delay(tag, 5000)
+	c.mu.Lock()
+	if c.gen != g || c.switching || c.state != StOn {
 		c.mu.Unlock()
 		return
 	}
-	c.mu.Lock()
-	c.deadCount++
-	dc := c.deadCount
-	c.mu.Unlock()
-	c.log.Add(fmt.Sprintf("Выбранный сервер не ответил (%d)", dc))
-	if dc < 2 {
-		return
+	c.ping = d
+	warn := false
+	if d > 0 {
+		c.deadCount = 0
+	} else if c.deadCount < 2 {
+		c.deadCount++
+		warn = c.deadCount == 2
 	}
-	c.mu.Lock()
-	c.deadCount = 0
 	c.mu.Unlock()
-	c.prefs.Update(func(d *PrefsData) { d.Pinned = "" })
-	grp := c.desiredGroup()
-	if c.ensureWorkingGroup(g, grp, false) == "" {
-		_ = cl.Select(Selector, grp)
-		c.setState(g, StWaiting, "Ни один сервер не отвечает. Повторная попытка через несколько секунд")
-		c.scheduleRetry(g, 15*time.Second)
+	if warn {
+		c.showBanner("Выбранный сервер не отвечает", 2)
 	}
-	c.refreshStatus()
-	c.showBanner("Выбранный сервер не отвечает — включён автовыбор", 2)
 }
 
 func (c *Core) checkSub(g int) {

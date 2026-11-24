@@ -151,6 +151,9 @@ public final class Changelog {
                 "Подписки: неудачная загрузка повторяется через полчаса, а не через 12 часов",
                 "Серверы: ссылки с flow «vision-udp443» и неверным портом больше не ломают подключение",
         });
+        ENTRIES.put(67, new String[]{
+                "Ручной выбор сервера сохраняется, если сервер временно перестал отвечать",
+        });
     }
 
     /** Entries for every version newer than {@code fromCode} up to and including {@code toCode}, oldest first. */

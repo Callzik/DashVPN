@@ -667,9 +667,13 @@ public class BoxVpnService extends VpnService {
             }
         }, "direct-check").start();
 
-        AppState.phase = "Поиск самого быстрого сервера (" + groupLabel(group) + ")";
-        AppState.changed();
-        String working = ensureWorkingGroup(group, true);
+        String pinned = prefs.pinned();
+        boolean manual = !pinned.isEmpty() && applyPin(pinned);
+        if (!manual) {
+            AppState.phase = "Поиск самого быстрого сервера (" + groupLabel(group) + ")";
+            AppState.changed();
+        }
+        String working = manual ? group : ensureWorkingGroup(group, true);
         if (working == null) {
             if (!setVpn(AppState.WAITING)) return;
             AppState.phase = AppState.wl == AppState.WL_NONET
@@ -678,11 +682,11 @@ public class BoxVpnService extends VpnService {
         } else {
             if (!setVpn(AppState.ON)) return;
             AppState.since = System.currentTimeMillis();
-            String pn = prefs.pinned();
-            if (!pn.isEmpty()) {
-                if (!applyPin(pn)) prefs.pinned("");
+            if (!manual) {
+                String currentPin = prefs.pinned();
+                if (!currentPin.isEmpty() && !applyPin(currentPin)) prefs.pinned("");
+                laterSpeedCheck();
             }
-            laterSpeedCheck();
         }
         refreshStatus();
         AppState.changed();
@@ -1065,21 +1069,11 @@ public class BoxVpnService extends VpnService {
             AppState.changed();
             return;
         }
-        deadCount++;
-        Server s = byTag.get(tag);
-        AppState.log("Выбранный сервер " + (s != null ? s.name : tag) + " не ответил (" + deadCount + ")");
-        if (deadCount < 2) return;
-        deadCount = 0;
-        prefs.pinned("");
-        String g = desiredGroup();
-        if (ensureWorkingGroup(g, false) == null) {
-            clash.select(ConfigBuilder.SELECTOR, g);
-            if (!setVpn(AppState.WAITING)) return;
-            AppState.phase = "Ни один сервер не отвечает. Повторная попытка через несколько секунд";
-            scheduleReevaluate("retry", 15000);
+        AppState.ping = -1;
+        AppState.changed();
+        if (deadCount < 2 && ++deadCount == 2) {
+            AppState.banner("Выбранный сервер не отвечает", 2);
         }
-        refreshStatus();
-        AppState.banner("Выбранный сервер не отвечает — включён автовыбор", 2);
     }
 
     /** Selects a server by name; false when there is no such server. */
